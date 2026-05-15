@@ -6,7 +6,6 @@ import { useUIStore } from "@/stores/ui.store";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MonthSelector } from "@/components/shared/month-selector";
@@ -17,21 +16,33 @@ export default function CalendarPage() {
   const { viewMode, selectedMonth } = useUIStore();
   const isShared = viewMode === "couple" && !!couple;
 
-  const { data: stats, isLoading } = useQuery({
-    queryKey: ["monthly-stats-calendar", user?.id, couple?.id, selectedMonth, isShared],
+  const lastDayOfMonth = (() => {
+    const [year, m] = selectedMonth.split("-").map(Number);
+    return new Date(Date.UTC(year, m, 0)).toISOString().split("T")[0];
+  })();
+
+  const { data: result, isLoading } = useQuery({
+    queryKey: ["transactions-calendar", user?.id, couple?.id, selectedMonth, isShared],
     queryFn: () =>
-      transactionsService.getMonthlyStats(user!.id, couple?.id ?? null, selectedMonth, isShared),
+      transactionsService.getTransactions(
+        user!.id,
+        couple?.id ?? null,
+        { dateFrom: `${selectedMonth}-01`, dateTo: lastDayOfMonth },
+        { page: 1, pageSize: 500 },
+        { field: "date", direction: "asc" },
+        isShared
+      ),
     enabled: !!user,
   });
 
-  const transactionsByDate = stats?.transactions
-    ? (stats.transactions as any[]).reduce((acc: Record<string, any[]>, t) => {
-        const date = t.date;
-        if (!acc[date]) acc[date] = [];
-        acc[date].push(t);
-        return acc;
-      }, {})
-    : {};
+  const transactions = result?.data ?? [];
+
+  const transactionsByDate = transactions.reduce((acc: Record<string, typeof transactions>, t) => {
+    const date = t.date;
+    if (!acc[date]) acc[date] = [];
+    acc[date].push(t);
+    return acc;
+  }, {});
 
   const daysInMonth = new Date(
     parseInt(selectedMonth.split("-")[0]),
@@ -49,11 +60,11 @@ export default function CalendarPage() {
         <div className="flex items-center justify-between">
           <div className="flex gap-4 text-sm">
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-success" />
+              <div className="w-2.5 h-2.5 rounded-full bg-[hsl(var(--success))]" />
               <span className="text-muted-foreground">Receitas</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <div className="w-2.5 h-2.5 rounded-full bg-expense" />
+              <div className="w-2.5 h-2.5 rounded-full bg-[hsl(var(--expense))]" />
               <span className="text-muted-foreground">Despesas</span>
             </div>
           </div>
@@ -78,8 +89,8 @@ export default function CalendarPage() {
                 const day = i + 1;
                 const dateStr = `${selectedMonth}-${String(day).padStart(2, "0")}`;
                 const dayTransactions = transactionsByDate[dateStr] ?? [];
-                const hasIncome = dayTransactions.some((t: any) => t.type === "income");
-                const hasExpense = dayTransactions.some((t: any) => t.type === "expense");
+                const hasIncome = dayTransactions.some((t) => t.type === "income");
+                const hasExpense = dayTransactions.some((t) => t.type === "expense");
                 const isToday = dateStr === new Date().toISOString().split("T")[0];
 
                 return (
@@ -98,8 +109,8 @@ export default function CalendarPage() {
                         {day}
                       </span>
                       <div className="flex gap-0.5">
-                        {hasIncome && <div className="w-1.5 h-1.5 rounded-full bg-success" />}
-                        {hasExpense && <div className="w-1.5 h-1.5 rounded-full bg-expense" />}
+                        {hasIncome && <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--success))]" />}
+                        {hasExpense && <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--expense))]" />}
                       </div>
                     </div>
                     {dayTransactions.length > 0 && (
@@ -127,22 +138,22 @@ export default function CalendarPage() {
             <div className="space-y-2">
               {Object.entries(transactionsByDate)
                 .sort(([a], [b]) => b.localeCompare(a))
-                .map(([date, transactions]) => (
+                .map(([date, txList]) => (
                   <Card key={date}>
                     <CardHeader className="pb-2 pt-4 px-4">
                       <CardTitle className="text-sm">{formatDate(date, "EEEE, dd 'de' MMMM")}</CardTitle>
                     </CardHeader>
                     <CardContent className="px-4 pb-4 space-y-2">
-                      {(transactions as any[]).map((t: any) => (
+                      {txList.map((t) => (
                         <div key={t.id} className="flex items-center justify-between text-sm">
                           <div className="flex items-center gap-2">
                             {t.type === "income"
-                              ? <ArrowUpRight className="w-4 h-4 text-success" />
-                              : <ArrowDownRight className="w-4 h-4 text-expense" />
+                              ? <ArrowUpRight className="w-4 h-4 text-[hsl(var(--success))]" />
+                              : <ArrowDownRight className="w-4 h-4 text-[hsl(var(--expense))]" />
                             }
                             <span className="truncate max-w-[200px]">{t.description}</span>
                           </div>
-                          <span className={t.type === "income" ? "text-success font-medium" : "text-expense font-medium"}>
+                          <span className={t.type === "income" ? "text-[hsl(var(--success))] font-medium" : "text-[hsl(var(--expense))] font-medium"}>
                             {t.type === "income" ? "+" : "-"}{formatCurrency(t.amount)}
                           </span>
                         </div>

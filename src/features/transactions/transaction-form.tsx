@@ -41,7 +41,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     resolver: zodResolver(transactionSchema) as any,
     defaultValues: {
-      type: transaction?.type ?? "expense",
+      type: (transaction?.type === "income" ? "income" : "expense") as "income" | "expense",
       amount: transaction?.amount ?? undefined,
       description: transaction?.description ?? "",
       notes: transaction?.notes ?? "",
@@ -92,7 +92,7 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
   });
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as TransactionInput))} className="space-y-4">
       {/* Type */}
       <div className="space-y-2">
         <Label>Tipo</Label>
