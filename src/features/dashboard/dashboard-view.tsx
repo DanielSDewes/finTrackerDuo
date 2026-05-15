@@ -121,8 +121,8 @@ export function DashboardView() {
       />
 
       <div className="p-4 sm:p-6 space-y-6">
-        {/* Month selector */}
-        <div className="flex items-center justify-between">
+        {/* Month selector — carrossel dinâmico */}
+        <div className="space-y-3">
           <h2 className="text-lg font-semibold">Visão Geral</h2>
           <MonthSelector />
         </div>

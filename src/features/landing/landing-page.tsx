@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { motion, type Variants } from "framer-motion";
 import {
@@ -114,10 +115,8 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-sm">F</span>
-              </div>
-              <span className="font-bold text-xl tracking-tight">FinTracker</span>
+              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={32} height={32} />
+              <span className="font-bold text-xl tracking-tight">finTrackerDuo</span>
             </div>
 
             <nav className="hidden md:flex items-center gap-6">
@@ -498,7 +497,7 @@ export function LandingPage() {
               Pronto para organizar suas finanças?
             </h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Junte-se a milhares de pessoas que já controlam melhor seu dinheiro com o FinTracker.
+              Junte-se a milhares de pessoas que já controlam melhor seu dinheiro com o finTrackerDuo.
             </p>
             <Link href="/auth/register">
               <Button size="xl">
@@ -515,13 +514,11 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded bg-primary flex items-center justify-center">
-                <span className="text-primary-foreground font-bold text-xs">F</span>
-              </div>
-              <span className="font-semibold text-sm">FinTracker</span>
+              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={24} height={24} />
+              <span className="font-semibold text-sm">finTrackerDuo</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              2025 FinTracker. Todos os direitos reservados.
+              2025 finTrackerDuo. Todos os direitos reservados.
             </p>
             <div className="flex gap-4 text-xs text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors">Privacidade</a>

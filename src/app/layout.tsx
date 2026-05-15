@@ -39,11 +39,18 @@ export const metadata: Metadata = {
     title: "FinTracker — Controle Financeiro para Casais",
     description: "Organize suas finanças pessoais e do casal em uma plataforma moderna.",
     siteName: "FinTracker",
+    images: [
+      {
+        url: "/iconeSite.png",
+        alt: "finTrackerDuo — Controle Financeiro para Casais",
+      },
+    ],
   },
   twitter: {
     card: "summary_large_image",
     title: "FinTracker",
     description: "Controle financeiro inteligente para casais",
+    images: ["/iconeSite.png"],
   },
   robots: {
     index: true,

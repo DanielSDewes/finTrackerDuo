@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -73,8 +74,8 @@ export function Sidebar() {
           sidebarCollapsed ? "justify-center" : "justify-between"
         )}>
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center shrink-0">
-              <span className="text-primary-foreground font-bold text-xs">F</span>
+            <div className="w-7 h-7 shrink-0">
+              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={28} height={28} />
             </div>
             <AnimatePresence>
               {!sidebarCollapsed && (

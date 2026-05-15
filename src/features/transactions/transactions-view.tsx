@@ -3,19 +3,21 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
-  Plus, Filter, Search, ArrowUpRight, ArrowDownRight, ArrowLeftRight,
-  Trash2, Pencil, MoreHorizontal,
+  Plus, Search, ArrowUpRight, ArrowDownRight,
+  Trash2, Pencil, MoreHorizontal, Calendar,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
+import { getMonthWindow } from "@/components/shared/month-selector";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
@@ -28,7 +30,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TransactionForm } from "./transaction-form";
-import type { Transaction, FilterOptions } from "@/types";
+import type { Transaction } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 
 function AlertDialogComponent({
@@ -45,7 +47,10 @@ function AlertDialogComponent({
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction onClick={onConfirm} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+          <AlertDialogAction
+            onClick={onConfirm}
+            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+          >
             Excluir
           </AlertDialogAction>
         </AlertDialogFooter>
@@ -54,31 +59,120 @@ function AlertDialogComponent({
   );
 }
 
+interface TransactionRowProps {
+  transaction: Transaction;
+  type: "income" | "expense";
+  onEdit: (t: Transaction) => void;
+  onDelete: (id: string) => void;
+}
+
+function TransactionRow({ transaction: tx, type, onEdit, onDelete }: TransactionRowProps) {
+  const statusVariants: Record<string, "success" | "warning" | "outline"> = {
+    completed: "success",
+    pending: "warning",
+    cancelled: "outline",
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="flex items-center gap-3 p-2 rounded-lg hover:bg-[hsl(var(--muted)/0.5)] transition-colors group"
+    >
+      <div
+        className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+        style={{ backgroundColor: `${tx.category?.color ?? (type === "income" ? "#22c55e" : "#ef4444")}22` }}
+      >
+        {type === "income"
+          ? <ArrowUpRight className="w-4 h-4 text-[hsl(var(--success))]" />
+          : <ArrowDownRight className="w-4 h-4 text-[hsl(var(--expense))]" />
+        }
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <p className="text-sm font-medium truncate">{tx.description}</p>
+          {tx.is_shared && (
+            <Badge variant="outline" className="text-[10px] py-0 h-4 border-pink-500/30 text-pink-500 shrink-0">
+              Casal
+            </Badge>
+          )}
+          <Badge variant={statusVariants[tx.status] ?? "outline"} className="text-[10px] py-0 h-4 shrink-0">
+            {tx.status === "completed" ? "Concluída" : tx.status === "pending" ? "Pendente" : "Cancelada"}
+          </Badge>
+        </div>
+        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+          <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(tx.date)}</span>
+          {tx.category && (
+            <span className="text-xs text-[hsl(var(--muted-foreground))]">{tx.category.name}</span>
+          )}
+        </div>
+      </div>
+
+      <div className="flex items-center gap-1 shrink-0">
+        <p className={cn(
+          "text-sm font-semibold",
+          type === "income" ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]"
+        )}>
+          {type === "income" ? "+" : "-"}{formatCurrency(tx.amount)}
+        </p>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="opacity-0 group-hover:opacity-100 transition-opacity"
+            >
+              <MoreHorizontal className="w-4 h-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => onEdit(tx)}>
+              <Pencil className="w-4 h-4" />
+              Editar
+            </DropdownMenuItem>
+            <DropdownMenuItem destructive onClick={() => onDelete(tx.id)}>
+              <Trash2 className="w-4 h-4" />
+              Excluir
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </motion.div>
+  );
+}
+
 export function TransactionsView() {
   const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
+  const { viewMode, selectedMonth, setSelectedMonth } = useUIStore();
   const queryClient = useQueryClient();
   const isShared = viewMode === "couple" && !!couple;
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const [page, setPage] = useState(1);
-  const [filters, setFilters] = useState<FilterOptions>({});
   const [search, setSearch] = useState("");
 
+  const currentMonth = new Date().toISOString().slice(0, 7);
+  const months = getMonthWindow(selectedMonth);
+
+  const [year, monthNum] = selectedMonth.split("-").map(Number);
+  const lastDay = new Date(Date.UTC(year, monthNum, 0)).toISOString().split("T")[0];
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions", user?.id, couple?.id, filters, page, search, isShared],
+    queryKey: ["transactions", user?.id, couple?.id, selectedMonth, isShared],
     queryFn: () =>
       transactionsService.getTransactions(
         user!.id,
         couple?.id ?? null,
-        { ...filters, search: search || undefined },
-        { page, pageSize: 20 },
+        { dateFrom: `${selectedMonth}-01`, dateTo: lastDay },
+        { page: 1, pageSize: 500 },
         { field: "date", direction: "desc" },
         isShared
       ),
     enabled: !!user,
+    staleTime: 60_000,
   });
 
   const deleteMutation = useMutation({
@@ -93,56 +187,78 @@ export function TransactionsView() {
     onError: () => toast.error("Erro ao excluir transação"),
   });
 
-  const totalPages = Math.ceil((data?.count ?? 0) / 20);
-
-  const typeIcons = {
-    income: <ArrowUpRight className="w-4 h-4 text-success" />,
-    expense: <ArrowDownRight className="w-4 h-4 text-expense" />,
-    transfer: <ArrowLeftRight className="w-4 h-4 text-muted-foreground" />,
+  const handleEdit = (t: Transaction) => {
+    setEditingTransaction(t);
+    setFormOpen(true);
   };
 
-  const statusVariants: Record<string, "success" | "warning" | "outline"> = {
-    completed: "success",
-    pending: "warning",
-    cancelled: "outline",
-  };
+  const filtered = (data?.data ?? []).filter(
+    (tx) => !search || tx.description.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const incomeList = filtered.filter((t) => t.type === "income");
+  const expenseList = filtered.filter((t) => t.type === "expense");
+
+  const incomeTotal = incomeList.reduce((s, t) => s + t.amount, 0);
+  const expenseTotal = expenseList.reduce((s, t) => s + t.amount, 0);
+
+  const selectedMonthLabel = new Date(Date.UTC(year, monthNum - 1, 1)).toLocaleDateString(
+    "pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }
+  );
+
+  function MonthListSkeleton() {
+    return (
+      <div className="space-y-1 p-2">
+        {Array.from({ length: 6 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-full rounded-lg" />
+        ))}
+      </div>
+    );
+  }
+
+  function TransactionListSkeleton() {
+    return (
+      <div className="space-y-2 p-2">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="flex items-center gap-3 p-2">
+            <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+            <div className="flex-1">
+              <Skeleton className="h-4 w-36 mb-1.5" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+            <Skeleton className="h-4 w-16" />
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div>
-      <Header title="Transações" subtitle="Gerencie todas as suas movimentações financeiras" />
+      <Header
+        title="Transações"
+        subtitle="Gerencie suas movimentações financeiras por mês"
+      />
 
       <div className="p-4 sm:p-6 space-y-4">
-        {/* Header actions */}
+        {/* Top bar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="flex flex-1 items-center gap-2 w-full sm:w-auto">
-            <div className="relative flex-1 sm:max-w-xs">
-              <Input
-                placeholder="Buscar transações..."
-                leftIcon={<Search />}
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-              />
-            </div>
-
-            <Select
-              value={filters.type ?? "all"}
-              onValueChange={(v) => { setFilters((f) => ({ ...f, type: v === "all" ? undefined : v as any })); setPage(1); }}
-            >
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="Tipo" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="income">Receitas</SelectItem>
-                <SelectItem value="expense">Despesas</SelectItem>
-              </SelectContent>
-            </Select>
+          <div className="relative flex-1 sm:max-w-xs">
+            <Input
+              placeholder="Buscar no mês selecionado..."
+              leftIcon={<Search />}
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
           </div>
 
-          <Dialog open={formOpen} onOpenChange={(open) => {
-            setFormOpen(open);
-            if (!open) setEditingTransaction(null);
-          }}>
+          <Dialog
+            open={formOpen}
+            onOpenChange={(open) => {
+              setFormOpen(open);
+              if (!open) setEditingTransaction(null);
+            }}
+          >
             <DialogTrigger asChild>
               <Button onClick={() => setEditingTransaction(null)}>
                 <Plus className="w-4 h-4" />
@@ -157,150 +273,177 @@ export function TransactionsView() {
               </DialogHeader>
               <TransactionForm
                 transaction={editingTransaction}
-                onSuccess={() => { setFormOpen(false); setEditingTransaction(null); }}
+                onSuccess={() => {
+                  setFormOpen(false);
+                  setEditingTransaction(null);
+                }}
               />
             </DialogContent>
           </Dialog>
         </div>
 
-        {/* Transaction list */}
-        <div className="rounded-xl border border-border/50 overflow-hidden">
-          {isLoading ? (
-            <div className="divide-y divide-border/50">
-              {Array.from({ length: 8 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 p-4">
-                  <Skeleton className="w-9 h-9 rounded-xl shrink-0" />
-                  <div className="flex-1">
-                    <Skeleton className="h-4 w-48 mb-1.5" />
-                    <Skeleton className="h-3 w-24" />
+        {/* Two-panel layout */}
+        <div className="flex flex-col lg:flex-row gap-4 items-start">
+          {/* Month list */}
+          <div className="w-full lg:w-64 shrink-0">
+            <Card className="border-border/50">
+              <CardHeader className="pb-2 px-4 pt-4">
+                <CardTitle className="text-sm font-semibold text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+                  Meses
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-2">
+                {!user ? (
+                  <MonthListSkeleton />
+                ) : (
+                  <div className="space-y-0.5 max-h-[420px] overflow-y-auto pr-0.5">
+                    {months.map((month) => {
+                      const isSelected = month === selectedMonth;
+                      const isCurrent = month === currentMonth;
+                      const [my, mm] = month.split("-").map(Number);
+                      const label = new Date(Date.UTC(my, mm - 1, 1)).toLocaleDateString(
+                        "pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }
+                      );
+
+                      return (
+                        <button
+                          key={month}
+                          onClick={() => setSelectedMonth(month)}
+                          className={cn(
+                            "w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm transition-all cursor-pointer",
+                            isSelected
+                              ? "bg-[hsl(var(--primary)/0.1)] text-[hsl(var(--primary))] font-semibold border border-[hsl(var(--primary)/0.25)]"
+                              : "text-[hsl(var(--muted-foreground))] hover:bg-[hsl(var(--muted)/0.4)] hover:text-[hsl(var(--foreground))]"
+                          )}
+                        >
+                          <span className="capitalize truncate">{label}</span>
+                          {isCurrent && (
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] h-4 py-0 ml-1 shrink-0 border-[hsl(var(--primary)/0.3)] text-[hsl(var(--primary))]"
+                            >
+                              atual
+                            </Badge>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <Skeleton className="h-4 w-24" />
-                </div>
-              ))}
-            </div>
-          ) : data?.data.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-16 text-center">
-              <ArrowLeftRight className="w-12 h-12 text-muted-foreground/30 mb-3" />
-              <p className="font-medium text-muted-foreground">Nenhuma transação encontrada</p>
-              <p className="text-sm text-muted-foreground mt-1">
-                {search ? "Tente outros termos de busca" : "Adicione sua primeira transação"}
-              </p>
-            </div>
-          ) : (
-            <AnimatePresence>
-              <div className="divide-y divide-border/50">
-                {data?.data.map((transaction, i) => (
-                  <motion.div
-                    key={transaction.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.03 }}
-                    className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors group"
-                  >
-                    <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${transaction.category?.color ?? "#6366f1"}20` }}
-                    >
-                      {typeIcons[transaction.type]}
-                    </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <p className="text-sm font-medium truncate">{transaction.description}</p>
-                        {transaction.is_shared && (
-                          <Badge variant="outline" className="text-[10px] py-0 h-4 border-pink-500/30 text-pink-500 shrink-0">
-                            Casal
-                          </Badge>
-                        )}
-                        <Badge variant={statusVariants[transaction.status] ?? "outline"} className="text-[10px] py-0 h-4 shrink-0">
-                          {transaction.status === "completed" ? "Concluída" : transaction.status === "pending" ? "Pendente" : "Cancelada"}
-                        </Badge>
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                        <span className="text-xs text-muted-foreground">{formatDate(transaction.date)}</span>
-                        {transaction.category && (
-                          <span className="text-xs text-muted-foreground">{transaction.category.name}</span>
-                        )}
-                        {transaction.account && (
-                          <span className="text-xs text-muted-foreground">{transaction.account.name}</span>
-                        )}
-                      </div>
-                    </div>
+          {/* Transactions panel */}
+          <div className="flex-1 min-w-0">
+            {/* Month header */}
+            <div className="flex items-center gap-2 mb-4">
+              <Calendar className="w-4 h-4 text-[hsl(var(--muted-foreground))]" />
+              <h3 className="text-base font-semibold capitalize">{selectedMonthLabel}</h3>
+              {!isLoading && (
+                <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                  ({filtered.length} transaç{filtered.length === 1 ? "ão" : "ões"})
+                </span>
+              )}
+            </div>
 
-                    <div className="flex items-center gap-2 shrink-0">
-                      <p className={`text-sm font-semibold ${
-                        transaction.type === "income" ? "text-success" : "text-expense"
-                      }`}>
-                        {transaction.type === "income" ? "+" : "-"}
-                        {formatCurrency(transaction.amount)}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Receitas */}
+              <Card className="border-[hsl(var(--success)/0.25)]">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-[hsl(var(--success))]">
+                      Receitas
+                      {!isLoading && incomeList.length > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                          ({incomeList.length})
+                        </span>
+                      )}
+                    </CardTitle>
+                    {!isLoading && incomeTotal > 0 && (
+                      <span className="text-sm font-bold text-[hsl(var(--success))]">
+                        +{formatCurrency(incomeTotal)}
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0 px-3 pb-3">
+                  {isLoading ? (
+                    <TransactionListSkeleton />
+                  ) : incomeList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <ArrowUpRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
+                      <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                        {search ? "Nenhuma receita encontrada" : "Nenhuma receita neste mês"}
                       </p>
-
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="opacity-0 group-hover:opacity-100 transition-opacity"
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() => {
-                              setEditingTransaction(transaction);
-                              setFormOpen(true);
-                            }}
-                          >
-                            <Pencil className="w-4 h-4" />
-                            Editar
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            destructive
-                            onClick={() => setDeleteId(transaction.id)}
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Excluir
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
                     </div>
-                  </motion.div>
-                ))}
-              </div>
-            </AnimatePresence>
-          )}
-        </div>
+                  ) : (
+                    <AnimatePresence>
+                      <div className="space-y-0.5 max-h-[480px] overflow-y-auto pr-0.5">
+                        {incomeList.map((tx) => (
+                          <TransactionRow
+                            key={tx.id}
+                            transaction={tx}
+                            type="income"
+                            onEdit={handleEdit}
+                            onDelete={setDeleteId}
+                          />
+                        ))}
+                      </div>
+                    </AnimatePresence>
+                  )}
+                </CardContent>
+              </Card>
 
-        {/* Pagination */}
-        {totalPages > 1 && (
-          <div className="flex items-center justify-between">
-            <p className="text-sm text-muted-foreground">
-              {data?.count} transações
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(page - 1)}
-                disabled={page === 1}
-              >
-                Anterior
-              </Button>
-              <span className="flex items-center px-3 text-sm">
-                {page} / {totalPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setPage(page + 1)}
-                disabled={page === totalPages}
-              >
-                Próximo
-              </Button>
+              {/* Despesas */}
+              <Card className="border-[hsl(var(--expense)/0.25)]">
+                <CardHeader className="pb-2">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm font-semibold text-[hsl(var(--expense))]">
+                      Despesas
+                      {!isLoading && expenseList.length > 0 && (
+                        <span className="ml-1.5 text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                          ({expenseList.length})
+                        </span>
+                      )}
+                    </CardTitle>
+                    {!isLoading && expenseTotal > 0 && (
+                      <span className="text-sm font-bold text-[hsl(var(--expense))]">
+                        -{formatCurrency(expenseTotal)}
+                      </span>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-0 px-3 pb-3">
+                  {isLoading ? (
+                    <TransactionListSkeleton />
+                  ) : expenseList.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-10 text-center">
+                      <ArrowDownRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
+                      <p className="text-sm text-[hsl(var(--muted-foreground))]">
+                        {search ? "Nenhuma despesa encontrada" : "Nenhuma despesa neste mês"}
+                      </p>
+                    </div>
+                  ) : (
+                    <AnimatePresence>
+                      <div className="space-y-0.5 max-h-[480px] overflow-y-auto pr-0.5">
+                        {expenseList.map((tx) => (
+                          <TransactionRow
+                            key={tx.id}
+                            transaction={tx}
+                            type="expense"
+                            onEdit={handleEdit}
+                            onDelete={setDeleteId}
+                          />
+                        ))}
+                      </div>
+                    </AnimatePresence>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </div>
-        )}
+        </div>
       </div>
 
       <AlertDialogComponent
