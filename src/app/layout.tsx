@@ -38,9 +38,9 @@ export const metadata: Metadata = {
   authors: [{ name: "FinTracker" }],
   creator: "FinTracker",
   icons: {
-    icon: "/iconeSite.png",
-    shortcut: "/iconeSite.png",
-    apple: "/iconeSite.png",
+    icon: "/finTrackerDuo_logo.svg",
+    shortcut: "/finTrackerDuo_logo.svg",
+    apple: "/finTrackerDuo_logo.svg",
   },
   openGraph: {
     type: "website",
