@@ -1,9 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { cardTransactionSchema, type CardTransactionInput } from "../schemas/card.schema";
 import { cardsService } from "../services/cards.service";
@@ -28,6 +29,16 @@ type CardTransactionFormProps = {
 export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: CardTransactionFormProps) {
   const { user, couple } = useAuthStore();
 
+  const partnerId =
+    couple?.status === "active"
+      ? couple.owner_id === user?.id
+        ? couple.partner_id
+        : couple.owner_id
+      : null;
+
+  // UI-only toggles — not part of the Zod schema
+  const [forPartner, setForPartner] = useState(false);
+
   const {
     register,
     handleSubmit,
@@ -49,7 +60,9 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
   });
 
   const isInstallment = watch("is_installment");
+  const isShared = watch("is_shared");
   const installmentTotal = watch("installment_total");
+  const amount = watch("amount");
 
   const { data: categories } = useQuery({
     queryKey: ["categories", user?.id, "expense"],
@@ -59,28 +72,24 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
 
   const mutation = useMutation({
     mutationFn: async (data: CardTransactionInput) => {
-      if (data.is_shared && couple?.id) {
-        const partnerId =
-          couple.owner_id === user!.id ? couple.partner_id : couple.owner_id;
-        if (partnerId) {
-          return cardsService.splitTransaction(
-            data,
-            cardId,
-            billMonth,
-            billYear,
-            user!.id,
-            partnerId,
-            couple.id
-          );
-        }
+      // "Lançar para o parceiro" — full amount, partner's user_id
+      if (forPartner && partnerId && couple?.id) {
+        return cardsService.createTransaction(
+          { ...data, is_shared: false },
+          cardId, billMonth, billYear, partnerId, couple.id
+        );
       }
+
+      // "Dividir com casal" — 50/50 split
+      if (data.is_shared && partnerId && couple?.id) {
+        return cardsService.splitTransaction(
+          data, cardId, billMonth, billYear, user!.id, partnerId, couple.id
+        );
+      }
+
+      // Regular transaction
       return cardsService.createTransaction(
-        data,
-        cardId,
-        billMonth,
-        billYear,
-        user!.id,
-        couple?.id ?? null
+        data, cardId, billMonth, billYear, user!.id, couple?.id ?? null
       );
     },
     onSuccess: () => {
@@ -90,7 +99,6 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
     onError: () => toast.error("Erro ao criar lançamento"),
   });
 
-  const amount = watch("amount");
   const perInstallment =
     isInstallment && installmentTotal > 1 && amount
       ? +(amount / installmentTotal).toFixed(2)
@@ -201,22 +209,57 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         )}
       </div>
 
-      {/* Shared / split */}
-      {couple && (
-        <div className="flex items-center justify-between p-3 rounded-xl border border-border/50 bg-muted/20">
-          <div>
-            <Label htmlFor="is_shared">Dividir com casal</Label>
-            <p className="text-xs text-muted-foreground">
-              Cada um paga metade do valor
-            </p>
+      {/* Couple options — only shown when in an active couple */}
+      {partnerId && (
+        <div className="space-y-2 p-3 rounded-xl border border-border/50 bg-muted/20">
+          {/* Dividir com casal — disabled when forPartner is on */}
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="is_shared" className={forPartner ? "opacity-40" : undefined}>
+                Dividir com casal
+              </Label>
+              <p className="text-xs text-muted-foreground">Cada um paga metade do valor</p>
+            </div>
+            <Controller
+              name="is_shared"
+              control={control}
+              render={({ field }) => (
+                <Switch
+                  id="is_shared"
+                  checked={field.value && !forPartner}
+                  onCheckedChange={(v) => {
+                    field.onChange(v);
+                    if (v) setForPartner(false);
+                  }}
+                  disabled={forPartner}
+                />
+              )}
+            />
           </div>
-          <Controller
-            name="is_shared"
-            control={control}
-            render={({ field }) => (
-              <Switch id="is_shared" checked={field.value} onCheckedChange={field.onChange} />
-            )}
-          />
+
+          {/* Lançar para o parceiro — disabled when is_shared is on */}
+          <div className="flex items-center justify-between pt-2 border-t border-border/40">
+            <div>
+              <Label htmlFor="for_partner" className={cn("flex items-center gap-1.5", isShared && !forPartner ? "opacity-40" : undefined)}>
+                <UserRound className="w-3.5 h-3.5" />
+                Lançar para o parceiro(a)
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Valor inteiro na conta do parceiro(a)
+              </p>
+            </div>
+            <Switch
+              id="for_partner"
+              checked={forPartner}
+              onCheckedChange={(v) => {
+                setForPartner(v);
+                if (v) {
+                  // reset is_shared when switching to for_partner mode
+                }
+              }}
+              disabled={isShared && !forPartner}
+            />
+          </div>
         </div>
       )}
 
