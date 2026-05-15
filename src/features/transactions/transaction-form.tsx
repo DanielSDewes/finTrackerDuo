@@ -1,16 +1,15 @@
 "use client";
 
-import { useEffect } from "react";
+import { useState } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2 } from "lucide-react";
+import { Loader2, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { transactionSchema, type TransactionInput } from "@/schemas/transaction";
 import { transactionsService } from "@/services/transactions.service";
 import { categoriesService } from "@/services/categories.service";
 import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -23,19 +22,26 @@ import type { Transaction } from "@/types";
 type TransactionFormProps = {
   transaction?: Transaction | null;
   onSuccess?: () => void;
+  /** ID of the partner — passed when couple is active */
+  partnerId?: string;
+  /** True when this form is already opened in "partner view" mode */
+  isPartnerForm?: boolean;
 };
 
-export function TransactionForm({ transaction, onSuccess }: TransactionFormProps) {
+export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerForm = false }: TransactionFormProps) {
   const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
   const queryClient = useQueryClient();
+
+  // UI-only state: whether to create this transaction for the partner
+  const [forPartner, setForPartner] = useState(isPartnerForm);
+
+  const targetUserId = forPartner && partnerId ? partnerId : user!.id;
 
   const {
     register,
     handleSubmit,
     control,
     watch,
-    setValue,
     formState: { errors },
   } = useForm<TransactionInput>({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -48,7 +54,6 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
       date: transaction?.date ?? new Date().toISOString().split("T")[0],
       category_id: transaction?.category_id ?? null,
       account_id: transaction?.account_id ?? null,
-      is_shared: transaction?.is_shared ?? (viewMode === "couple"),
       is_recurring: transaction?.is_recurring ?? false,
       status: transaction?.status ?? "completed",
       tags: transaction?.tags ?? [],
@@ -68,8 +73,9 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
     mutationFn: async (data: TransactionInput) => {
       const payload = {
         ...data,
-        user_id: user!.id,
+        user_id: targetUserId,
         couple_id: couple?.id ?? null,
+        is_shared: false,
         attachments: [],
         deleted_at: null,
       };
@@ -231,23 +237,22 @@ export function TransactionForm({ transaction, onSuccess }: TransactionFormProps
         </div>
       )}
 
-      {/* Shared (if couple exists) */}
-      {couple && (
+      {/* For partner toggle — only when couple is active and not already in partner view */}
+      {partnerId && !isPartnerForm && (
         <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
           <div>
-            <Label htmlFor="is_shared">Compartilhar com casal</Label>
-            <p className="text-xs text-muted-foreground">Visível para seu parceiro(a)</p>
+            <Label htmlFor="for_partner" className="flex items-center gap-1.5">
+              <UserRound className="w-3.5 h-3.5" />
+              Criar para o parceiro(a)
+            </Label>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              A transação será registrada na conta do parceiro(a)
+            </p>
           </div>
-          <Controller
-            name="is_shared"
-            control={control}
-            render={({ field }) => (
-              <Switch
-                id="is_shared"
-                checked={field.value}
-                onCheckedChange={field.onChange}
-              />
-            )}
+          <Switch
+            id="for_partner"
+            checked={forPartner}
+            onCheckedChange={setForPartner}
           />
         </div>
       )}

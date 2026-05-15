@@ -68,9 +68,10 @@ export const transactionsService = {
     return data as Transaction;
   },
 
-  async deleteTransaction(id: string) {
+  async deleteTransaction(id: string, isPartner = false) {
     const supabase = createClient();
-    const { error } = await supabase.rpc("soft_delete_transaction", { transaction_id: id });
+    const rpc = isPartner ? "soft_delete_partner_transaction" : "soft_delete_transaction";
+    const { error } = await supabase.rpc(rpc, { transaction_id: id });
     if (error) throw error;
   },
 

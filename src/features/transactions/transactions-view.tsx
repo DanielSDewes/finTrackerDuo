@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Plus, Search, ArrowUpRight, ArrowDownRight,
-  Trash2, Pencil, MoreHorizontal, Calendar,
+  Trash2, Pencil, MoreHorizontal, Calendar, Users,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth.store";
@@ -30,7 +30,7 @@ import {
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { TransactionForm } from "./transaction-form";
-import type { Transaction } from "@/types";
+import type { Transaction, UserProfile } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 
 function AlertDialogComponent({
@@ -92,11 +92,6 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
           <p className="text-sm font-medium truncate">{tx.description}</p>
-          {tx.is_shared && (
-            <Badge variant="outline" className="text-[10px] py-0 h-4 border-pink-500/30 text-pink-500 shrink-0">
-              Casal
-            </Badge>
-          )}
           <Badge variant={statusVariants[tx.status] ?? "outline"} className="text-[10px] py-0 h-4 shrink-0">
             {tx.status === "completed" ? "Concluída" : tx.status === "pending" ? "Pendente" : "Cancelada"}
           </Badge>
@@ -145,10 +140,16 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
 
 export function TransactionsView() {
   const { user, couple } = useAuthStore();
-  const { viewMode, selectedMonth, setSelectedMonth } = useUIStore();
+  const { selectedMonth, setSelectedMonth } = useUIStore();
   const queryClient = useQueryClient();
-  const isShared = viewMode === "couple" && !!couple;
 
+  // Resolve partner relative to the logged-in user
+  const partner = couple?.status === "active"
+    ? (couple.owner_id === user?.id ? couple.partner : couple.owner) as UserProfile | undefined
+    : undefined;
+  const partnerId = partner?.id;
+
+  const [viewingPartner, setViewingPartner] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -160,23 +161,26 @@ export function TransactionsView() {
   const [year, monthNum] = selectedMonth.split("-").map(Number);
   const lastDay = new Date(Date.UTC(year, monthNum, 0)).toISOString().split("T")[0];
 
+  // When viewing partner, query their userId instead of ours
+  const activeUserId = viewingPartner && partnerId ? partnerId : user!.id;
+
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions", user?.id, couple?.id, selectedMonth, isShared],
+    queryKey: ["transactions", activeUserId, couple?.id, selectedMonth],
     queryFn: () =>
       transactionsService.getTransactions(
-        user!.id,
+        activeUserId,
         couple?.id ?? null,
         { dateFrom: `${selectedMonth}-01`, dateTo: lastDay },
         { page: 1, pageSize: 500 },
         { field: "date", direction: "desc" },
-        isShared
+        false
       ),
     enabled: !!user,
     staleTime: 60_000,
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => transactionsService.deleteTransaction(id),
+    mutationFn: (id: string) => transactionsService.deleteTransaction(id, viewingPartner),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
       queryClient.invalidateQueries({ queryKey: ["monthly-stats"] });
@@ -237,19 +241,43 @@ export function TransactionsView() {
     <div>
       <Header
         title="Transações"
-        subtitle="Gerencie suas movimentações financeiras por mês"
+        subtitle={
+          viewingPartner && partner
+            ? `Transações de ${partner.name}`
+            : "Gerencie suas movimentações financeiras por mês"
+        }
       />
 
       <div className="p-4 sm:p-6 space-y-4">
         {/* Top bar */}
         <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-          <div className="relative flex-1 sm:max-w-xs">
-            <Input
-              placeholder="Buscar no mês selecionado..."
-              leftIcon={<Search />}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+          <div className="flex flex-col sm:flex-row gap-2 flex-1 sm:max-w-lg">
+            <div className="relative flex-1 sm:max-w-xs">
+              <Input
+                placeholder="Buscar no mês selecionado..."
+                leftIcon={<Search />}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+
+            {/* Partner view toggle */}
+            {partnerId && (
+              <Button
+                variant={viewingPartner ? "default" : "outline"}
+                size="sm"
+                className="gap-2 shrink-0"
+                onClick={() => {
+                  setViewingPartner((v) => !v);
+                  setSearch("");
+                  setFormOpen(false);
+                  setEditingTransaction(null);
+                }}
+              >
+                <Users className="w-4 h-4" />
+                {viewingPartner ? "Minhas transações" : `Ver transações de ${partner?.name?.split(" ")[0]}`}
+              </Button>
+            )}
           </div>
 
           <Dialog
@@ -269,10 +297,17 @@ export function TransactionsView() {
               <DialogHeader>
                 <DialogTitle>
                   {editingTransaction ? "Editar transação" : "Nova transação"}
+                  {viewingPartner && partner && (
+                    <span className="ml-2 text-sm font-normal text-muted-foreground">
+                      — {partner.name}
+                    </span>
+                  )}
                 </DialogTitle>
               </DialogHeader>
               <TransactionForm
                 transaction={editingTransaction}
+                partnerId={partnerId}
+                isPartnerForm={viewingPartner}
                 onSuccess={() => {
                   setFormOpen(false);
                   setEditingTransaction(null);
