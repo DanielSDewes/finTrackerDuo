@@ -14,11 +14,11 @@ export const coupleService = {
     return data as Couple | null;
   },
 
-  async createCouple(ownerId: string, inviteEmail: string): Promise<Couple> {
+  async createCouple(ownerId: string): Promise<Couple> {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("couples")
-      .insert({ owner_id: ownerId, invite_email: inviteEmail, status: "pending" })
+      .insert({ owner_id: ownerId, status: "pending" })
       .select("*, owner:owner_id(id,name,email,avatar_url)")
       .single();
     if (error) throw error;
