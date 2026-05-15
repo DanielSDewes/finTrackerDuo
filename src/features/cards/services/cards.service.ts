@@ -258,36 +258,24 @@ export const cardsService = {
     await this.recalculateBillTotal(bill.id);
   },
 
-  async deleteTransaction(id: string, billId: string) {
+  async deleteTransaction(id: string, _billId: string) {
     const supabase = createClient();
-    const { error } = await supabase
-      .from("credit_card_transactions")
-      .update({ deleted_at: new Date().toISOString() })
-      .eq("id", id);
+    // SECURITY DEFINER RPC bypasses the RLS UPDATE+SELECT conflict and
+    // recalculates the bill total in the same transaction.
+    const { error } = await supabase.rpc("soft_delete_card_transaction", {
+      p_transaction_id: id,
+    });
     if (error) throw error;
-    await this.recalculateBillTotal(billId);
   },
 
   async deleteInstallmentGroup(groupId: string) {
     const supabase = createClient();
-    const { data, error } = await supabase
-      .from("credit_card_transactions")
-      .select("id, bill_id")
-      .eq("installment_group_id", groupId)
-      .is("deleted_at", null);
+    // RPC handles soft-delete of all installments and recalculates every
+    // affected bill total atomically.
+    const { error } = await supabase.rpc("soft_delete_card_installment_group", {
+      p_group_id: groupId,
+    });
     if (error) throw error;
-
-    const now = new Date().toISOString();
-    const { error: e2 } = await supabase
-      .from("credit_card_transactions")
-      .update({ deleted_at: now })
-      .eq("installment_group_id", groupId);
-    if (e2) throw e2;
-
-    const billIds = [...new Set(data?.map((t) => t.bill_id) ?? [])];
-    for (const billId of billIds) {
-      await this.recalculateBillTotal(billId);
-    }
   },
 
   // ─── Dashboard summary ────────────────────────────────────────────────────
