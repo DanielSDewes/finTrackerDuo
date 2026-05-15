@@ -6,11 +6,12 @@ import {
   Heart, UserPlus, Copy, Users, CheckCircle, AlertCircle,
   Loader2, Shield, TrendingUp, Check, RefreshCw,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth.store";
 import { coupleService } from "@/services/couple.service";
 import { formatDate } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,12 +22,47 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { getInitials } from "@/lib/utils";
 
+function TokenBox({ token, label }: { token: string; label?: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(token);
+    setCopied(true);
+    toast.success("Código copiado!");
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="space-y-2">
+      {label && <Label>{label}</Label>}
+      <div className="flex gap-2 items-stretch">
+        <div className="flex-1 bg-[hsl(var(--muted))] border border-border/60 rounded-lg px-4 py-3 font-mono text-sm break-all select-all leading-relaxed">
+          {token}
+        </div>
+        <Button
+          variant="outline"
+          onClick={handleCopy}
+          className={cn(
+            "shrink-0 px-3 transition-colors",
+            copied && "border-[hsl(var(--success)/0.5)] text-[hsl(var(--success))]"
+          )}
+        >
+          {copied
+            ? <><Check className="w-4 h-4" /> Copiado</>
+            : <><Copy className="w-4 h-4" /> Copiar</>}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function CoupleView() {
   const { user, couple, setCouple } = useAuthStore();
   const queryClient = useQueryClient();
 
-  const [inviteToken, setInviteToken] = useState("");
-  const [copied, setCopied] = useState(false);
+  // Token gerado nesta sessão — exibido imediatamente após clicar "Gerar"
+  const [sessionToken, setSessionToken] = useState<string | null>(null);
+  const [acceptToken, setAcceptToken] = useState("");
 
   const { data: coupleData, isLoading } = useQuery({
     queryKey: ["couple", user?.id],
@@ -41,15 +77,15 @@ export function CoupleView() {
       setCouple(data);
       queryClient.setQueryData(["couple", user?.id], data);
       queryClient.invalidateQueries({ queryKey: ["couple"] });
-      toast.success("Código gerado!", {
-        description: "Compartilhe o código com seu parceiro(a).",
-      });
+      // Salva o token no estado local para exibir imediatamente
+      if (data.invite_token) setSessionToken(data.invite_token);
+      toast.success("Código gerado! Envie para seu parceiro(a).");
     },
     onError: () => toast.error("Erro ao gerar código de convite"),
   });
 
   const acceptMutation = useMutation({
-    mutationFn: () => coupleService.acceptInvite(inviteToken.trim(), user!.id),
+    mutationFn: () => coupleService.acceptInvite(acceptToken.trim(), user!.id),
     onSuccess: (data) => {
       setCouple(data);
       queryClient.setQueryData(["couple", user?.id], data);
@@ -63,6 +99,7 @@ export function CoupleView() {
     mutationFn: () => coupleService.dissolveCouple(coupleData!.id),
     onSuccess: () => {
       setCouple(null);
+      setSessionToken(null);
       queryClient.setQueryData(["couple", user?.id], null);
       queryClient.invalidateQueries({ queryKey: ["couple"] });
       toast.success("Vínculo encerrado");
@@ -70,18 +107,14 @@ export function CoupleView() {
     onError: () => toast.error("Erro ao encerrar vínculo"),
   });
 
-  const handleCopyToken = () => {
-    if (!coupleData?.invite_token) return;
-    navigator.clipboard.writeText(coupleData.invite_token);
-    setCopied(true);
-    toast.success("Código copiado!");
-    setTimeout(() => setCopied(false), 2000);
-  };
-
   const partner = coupleData?.owner_id === user?.id
     ? coupleData?.partner
     : coupleData?.owner;
   const isOwner = coupleData?.owner_id === user?.id;
+
+  // Token a exibir: prioritiza o gerado nesta sessão, depois o do banco
+  const displayToken =
+    sessionToken ?? (coupleData?.status === "pending" && isOwner ? coupleData.invite_token : null);
 
   return (
     <div>
@@ -95,11 +128,7 @@ export function CoupleView() {
 
         ) : coupleData?.status === "active" ? (
           /* ── Casal ativo ── */
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <Card className="border-pink-500/20 bg-pink-500/5">
               <CardContent className="p-6">
                 <div className="flex flex-col sm:flex-row items-center gap-6">
@@ -147,27 +176,9 @@ export function CoupleView() {
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {[
-                {
-                  icon: Users,
-                  title: "Visão Consolidada",
-                  desc: "Veja as finanças do casal no dashboard com o toggle Individual/Casal.",
-                  color: "text-primary",
-                  bg: "bg-primary/10",
-                },
-                {
-                  icon: Shield,
-                  title: "Transações Compartilhadas",
-                  desc: "Ao criar transações, marque como 'Compartilhar com casal'.",
-                  color: "text-pink-500",
-                  bg: "bg-pink-500/10",
-                },
-                {
-                  icon: TrendingUp,
-                  title: "Metas do Casal",
-                  desc: "Crie metas financeiras compartilhadas e acompanhem juntos.",
-                  color: "text-[hsl(var(--success))]",
-                  bg: "bg-[hsl(var(--success)/0.1)]",
-                },
+                { icon: Users, title: "Visão Consolidada", desc: "Veja as finanças do casal no dashboard com o toggle Individual/Casal.", color: "text-primary", bg: "bg-primary/10" },
+                { icon: Shield, title: "Transações Compartilhadas", desc: "Ao criar transações, marque como 'Compartilhar com casal'.", color: "text-pink-500", bg: "bg-pink-500/10" },
+                { icon: TrendingUp, title: "Metas do Casal", desc: "Crie metas financeiras compartilhadas e acompanhem juntos.", color: "text-[hsl(var(--success))]", bg: "bg-[hsl(var(--success)/0.1)]" },
               ].map((f) => (
                 <Card key={f.title}>
                   <CardContent className="p-4">
@@ -194,12 +205,7 @@ export function CoupleView() {
                         As finanças compartilhadas continuarão visíveis individualmente.
                       </p>
                     </div>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      onClick={() => dissolveMutation.mutate()}
-                      disabled={dissolveMutation.isPending}
-                    >
+                    <Button variant="destructive" size="sm" onClick={() => dissolveMutation.mutate()} disabled={dissolveMutation.isPending}>
                       {dissolveMutation.isPending ? <Loader2 className="animate-spin" /> : "Encerrar"}
                     </Button>
                   </div>
@@ -208,100 +214,22 @@ export function CoupleView() {
             </div>
           </motion.div>
 
-        ) : coupleData?.status === "pending" && isOwner ? (
-          /* ── Convite pendente — visão do dono ── */
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-4"
-          >
-            <Card className="border-warning/20 bg-warning/5">
-              <CardContent className="p-6">
-                <div className="flex items-start gap-4">
-                  <div className="w-10 h-10 rounded-xl bg-warning/20 flex items-center justify-center shrink-0">
-                    <AlertCircle className="w-5 h-5 text-warning" />
-                  </div>
-                  <div>
-                    <p className="font-semibold">Aguardando seu parceiro(a)</p>
-                    <p className="text-sm text-muted-foreground mt-1">
-                      Compartilhe o código abaixo. Assim que ele(a) colar o código e aceitar, vocês serão vinculados.
-                    </p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {coupleData.invite_token ? (
-              <Card>
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-base">Código de convite</CardTitle>
-                  <CardDescription className="text-xs">
-                    Envie este código para seu parceiro(a) pelo WhatsApp, SMS ou outro meio.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="flex gap-2 items-center">
-                    <div className="flex-1 bg-muted rounded-lg px-4 py-3 font-mono text-sm break-all select-all border border-border/50">
-                      {coupleData.invite_token}
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      onClick={handleCopyToken}
-                      className="shrink-0 h-10 w-10"
-                    >
-                      {copied
-                        ? <Check className="w-4 h-4 text-[hsl(var(--success))]" />
-                        : <Copy className="w-4 h-4" />}
-                    </Button>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Clique no ícone para copiar. Seu parceiro(a) deve colar este código na tela "Casal" → "Aceitar convite".
-                  </p>
-                </CardContent>
-              </Card>
-            ) : (
-              <Card className="border-destructive/20">
-                <CardContent className="p-4 space-y-2">
-                  <p className="text-sm text-destructive font-medium">Código não gerado</p>
-                  <p className="text-xs text-muted-foreground">
-                    O banco não gerou o token. Verifique se a extensão{" "}
-                    <code className="px-1 bg-muted rounded text-xs">pgcrypto</code> está
-                    habilitada no Supabase (Database → Extensions).
-                  </p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => createMutation.mutate()}
-                    disabled={createMutation.isPending}
-                  >
-                    <RefreshCw className="w-3 h-3" />
-                    Tentar novamente
-                  </Button>
-                </CardContent>
-              </Card>
-            )}
-          </motion.div>
-
         ) : (
-          /* ── Sem casal — criar ou aceitar ── */
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="space-y-6"
-          >
+          /* ── Sem casal / pendente ── */
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <div className="text-center py-6">
               <div className="w-20 h-20 rounded-full bg-pink-500/10 flex items-center justify-center mx-auto mb-4">
                 <Heart className="w-10 h-10 text-pink-500" />
               </div>
               <h2 className="text-xl font-bold mb-2">Conecte-se com seu parceiro(a)</h2>
               <p className="text-muted-foreground text-sm max-w-sm mx-auto">
-                Gere um código e compartilhe com quem você quer vincular, ou cole o código que recebeu.
+                Gere um código e compartilhe com seu parceiro(a), ou cole o código que você recebeu.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Gerar código */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-start">
+
+              {/* ── Gerar código ── */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -309,25 +237,63 @@ export function CoupleView() {
                     Convidar parceiro(a)
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Gere um código único e envie para seu parceiro(a) fora do app
+                    Gere um código único e envie para seu parceiro(a) pelo WhatsApp ou outro meio
                   </CardDescription>
                 </CardHeader>
-                <CardContent>
-                  <Button
-                    className="w-full"
-                    onClick={() => createMutation.mutate()}
-                    disabled={createMutation.isPending}
-                  >
-                    {createMutation.isPending ? (
-                      <><Loader2 className="animate-spin" /> Gerando...</>
+                <CardContent className="space-y-4">
+                  <AnimatePresence mode="wait">
+                    {displayToken ? (
+                      /* Token gerado — exibe em destaque */
+                      <motion.div
+                        key="token"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="space-y-4"
+                      >
+                        <div className="flex items-start gap-3 p-3 rounded-lg bg-[hsl(var(--success)/0.08)] border border-[hsl(var(--success)/0.25)]">
+                          <CheckCircle className="w-4 h-4 text-[hsl(var(--success))] mt-0.5 shrink-0" />
+                          <p className="text-xs text-[hsl(var(--success))] font-medium leading-relaxed">
+                            Código gerado! Copie e envie para seu parceiro(a).
+                          </p>
+                        </div>
+
+                        <TokenBox token={displayToken} label="Seu código de convite" />
+
+                        <p className="text-xs text-muted-foreground">
+                          Seu parceiro(a) deve colar este código na seção "Aceitar convite" ao lado.
+                        </p>
+
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-full text-muted-foreground"
+                          onClick={() => createMutation.mutate()}
+                          disabled={createMutation.isPending}
+                        >
+                          {createMutation.isPending
+                            ? <><Loader2 className="animate-spin w-3 h-3" /> Gerando...</>
+                            : <><RefreshCw className="w-3 h-3" /> Gerar novo código</>}
+                        </Button>
+                      </motion.div>
                     ) : (
-                      "Gerar código de convite"
+                      /* Estado inicial — apenas o botão */
+                      <motion.div key="btn" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <Button
+                          className="w-full"
+                          onClick={() => createMutation.mutate()}
+                          disabled={createMutation.isPending}
+                        >
+                          {createMutation.isPending
+                            ? <><Loader2 className="animate-spin" /> Gerando...</>
+                            : "Gerar código de convite"}
+                        </Button>
+                      </motion.div>
                     )}
-                  </Button>
+                  </AnimatePresence>
                 </CardContent>
               </Card>
 
-              {/* Aceitar convite */}
+              {/* ── Aceitar convite ── */}
               <Card>
                 <CardHeader className="pb-3">
                   <CardTitle className="text-base flex items-center gap-2">
@@ -343,8 +309,8 @@ export function CoupleView() {
                     <Label>Código do convite</Label>
                     <Input
                       placeholder="Cole o código aqui..."
-                      value={inviteToken}
-                      onChange={(e) => setInviteToken(e.target.value)}
+                      value={acceptToken}
+                      onChange={(e) => setAcceptToken(e.target.value)}
                       className="font-mono text-sm"
                     />
                   </div>
@@ -352,17 +318,28 @@ export function CoupleView() {
                     variant="outline"
                     className="w-full"
                     onClick={() => acceptMutation.mutate()}
-                    disabled={!inviteToken.trim() || acceptMutation.isPending}
+                    disabled={!acceptToken.trim() || acceptMutation.isPending}
                   >
-                    {acceptMutation.isPending ? (
-                      <><Loader2 className="animate-spin" /> Aceitando...</>
-                    ) : (
-                      "Aceitar convite"
-                    )}
+                    {acceptMutation.isPending
+                      ? <><Loader2 className="animate-spin" /> Aceitando...</>
+                      : "Aceitar convite"}
                   </Button>
                 </CardContent>
               </Card>
+
             </div>
+
+            {/* Aviso quando já tem convite pendente e não é o dono */}
+            {coupleData?.status === "pending" && !isOwner && (
+              <Card className="border-warning/20 bg-warning/5">
+                <CardContent className="p-4 flex items-start gap-3">
+                  <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+                  <p className="text-sm text-muted-foreground">
+                    Você recebeu um convite. Cole o código no campo "Aceitar convite" acima.
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
         )}
       </div>
