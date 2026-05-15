@@ -352,6 +352,7 @@ INSERT INTO categories (id, user_id, name, type, color, icon, is_default) VALUES
   (uuid_generate_v4(), NULL, 'Educação', 'expense', '#3b82f6', 'graduation-cap', TRUE),
   (uuid_generate_v4(), NULL, 'Lazer', 'expense', '#ec4899', 'gamepad-2', TRUE),
   (uuid_generate_v4(), NULL, 'Vestuário', 'expense', '#a855f7', 'shirt', TRUE),
+  (uuid_generate_v4(), NULL, 'Presente', 'expense', '#f472b6', 'gift', TRUE),
   (uuid_generate_v4(), NULL, 'Assinaturas', 'expense', '#64748b', 'repeat', TRUE),
   (uuid_generate_v4(), NULL, 'Cartão de Crédito', 'expense', '#f43f5e', 'credit-card', TRUE),
   (uuid_generate_v4(), NULL, 'Outros', 'expense', '#6b7280', 'more-horizontal', TRUE),
