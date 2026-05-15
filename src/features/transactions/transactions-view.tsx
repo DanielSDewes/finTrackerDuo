@@ -162,7 +162,7 @@ export function TransactionsView() {
   const lastDay = new Date(Date.UTC(year, monthNum, 0)).toISOString().split("T")[0];
 
   // When viewing partner, query their userId instead of ours
-  const activeUserId = viewingPartner && partnerId ? partnerId : user!.id;
+  const activeUserId = viewingPartner && partnerId ? partnerId : (user?.id ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: ["transactions", activeUserId, couple?.id, selectedMonth],
