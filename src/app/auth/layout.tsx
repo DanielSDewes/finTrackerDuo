@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "Autenticação | finTrackerDuo",
+  title: "finTrackerDuo",
   description: "Acesse sua conta ou crie uma nova",
 };
 
