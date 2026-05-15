@@ -39,6 +39,8 @@ export function CoupleView() {
     mutationFn: () => coupleService.createCouple(user!.id, inviteEmail),
     onSuccess: (data) => {
       setCouple(data);
+      // Popula o cache imediatamente para a view atualizar sem esperar o refetch
+      queryClient.setQueryData(["couple", user?.id], data);
       queryClient.invalidateQueries({ queryKey: ["couple"] });
       toast.success("Convite criado!", {
         description: "Compartilhe o link com seu parceiro(a).",
@@ -234,18 +236,59 @@ export function CoupleView() {
               </CardContent>
             </Card>
 
-            <div className="space-y-2">
-              <Label>Link de convite</Label>
-              <div className="flex gap-2">
-                <Input value={inviteLink} readOnly className="text-xs" />
-                <Button variant="outline" size="icon-sm" onClick={copyInviteLink}>
-                  <Copy className="w-4 h-4" />
-                </Button>
+            {coupleData.invite_token ? (
+              <div className="space-y-4">
+                {/* Link completo */}
+                <div className="space-y-2">
+                  <Label>Link de convite</Label>
+                  <div className="flex gap-2">
+                    <Input value={inviteLink} readOnly className="text-xs font-mono" />
+                    <Button variant="outline" size="icon-sm" onClick={copyInviteLink}>
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Envie este link para seu parceiro(a) pelo WhatsApp, email, etc.
+                  </p>
+                </div>
+
+                {/* Token isolado */}
+                <div className="space-y-2">
+                  <Label>Token do convite</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      value={coupleData.invite_token}
+                      readOnly
+                      className="text-xs font-mono"
+                    />
+                    <Button
+                      variant="outline"
+                      size="icon-sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(coupleData.invite_token!);
+                        toast.success("Token copiado!");
+                      }}
+                    >
+                      <Copy className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Seu parceiro(a) pode colar este token diretamente na tela "Aceitar convite".
+                  </p>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">
-                Compartilhe este link com seu parceiro(a) para ele(a) aceitar o convite.
-              </p>
-            </div>
+            ) : (
+              <Card className="border-destructive/20">
+                <CardContent className="p-4">
+                  <p className="text-sm text-destructive font-medium">Token não gerado</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    O token de convite não foi gerado pelo banco. Verifique se a extensão
+                    <code className="mx-1 px-1 bg-muted rounded text-xs">pgcrypto</code>
+                    está habilitada no Supabase (Database → Extensions).
+                  </p>
+                </CardContent>
+              </Card>
+            )}
           </motion.div>
 
         ) : (
