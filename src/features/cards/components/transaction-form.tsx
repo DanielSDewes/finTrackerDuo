@@ -56,6 +56,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
       is_installment: false,
       installment_total: 1,
       is_shared: false,
+      is_forecast: false,
     },
   });
 
@@ -89,7 +90,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
 
       // Regular transaction
       return cardsService.createTransaction(
-        data, cardId, billMonth, billYear, user!.id, couple?.id ?? null
+        data, cardId, billMonth, billYear, user!.id, couple?.id ?? null,
       );
     },
     onSuccess: () => {
@@ -207,6 +208,23 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
             )}
           </div>
         )}
+      </div>
+
+      {/* Forecast toggle */}
+      <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label htmlFor="is_forecast" className="text-orange-400">Previsão</Label>
+            <p className="text-xs text-muted-foreground">Lançamento estimado, ainda não confirmado</p>
+          </div>
+          <Controller
+            name="is_forecast"
+            control={control}
+            render={({ field }) => (
+              <Switch id="is_forecast" checked={field.value} onCheckedChange={field.onChange} />
+            )}
+          />
+        </div>
       </div>
 
       {/* Couple options — only shown when in an active couple */}

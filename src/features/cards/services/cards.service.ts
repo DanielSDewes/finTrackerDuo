@@ -210,6 +210,7 @@ export const cardsService = {
           installment_total,
           is_last_installment: i === installment_total,
           is_shared: base.is_shared,
+          is_forecast: base.is_forecast,
         });
         if (error) throw error;
         billsUpdated.add(bill.id);
@@ -236,6 +237,7 @@ export const cardsService = {
         installment_total: 1,
         is_last_installment: true,
         is_shared: base.is_shared,
+        is_forecast: base.is_forecast,
       });
       if (error) throw error;
       await this.recalculateBillTotal(bill.id);
@@ -283,6 +285,7 @@ export const cardsService = {
           is_last_installment: i === installment_total,
           is_shared: true,
           shared_group_id: sharedGroupId,
+          is_forecast: input.is_forecast,
         };
 
         const supabase = createClient();
@@ -316,6 +319,7 @@ export const cardsService = {
         is_last_installment: true,
         is_shared: true,
         shared_group_id: sharedGroupId,
+        is_forecast: input.is_forecast,
       };
 
       const supabase = createClient();
@@ -326,6 +330,15 @@ export const cardsService = {
       if (error) throw error;
       await this.recalculateBillTotal(bill.id);
     }
+  },
+
+  async updateTransactionForecast(id: string, isForecast: boolean) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("credit_card_transactions")
+      .update({ is_forecast: isForecast })
+      .eq("id", id);
+    if (error) throw error;
   },
 
   async deleteTransaction(id: string, billId: string) {

@@ -21,6 +21,7 @@ export const cardTransactionSchema = z.object({
   is_installment: z.boolean().default(false),
   installment_total: z.coerce.number().int().min(1).max(48).default(1),
   is_shared: z.boolean().default(false),
+  is_forecast: z.boolean().default(false),
 });
 
 export type CardTransactionInput = z.output<typeof cardTransactionSchema>;

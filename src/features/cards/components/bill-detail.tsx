@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, MoreVertical, ReceiptText, Layers } from "lucide-react";
+import { Plus, Search, Trash2, MoreVertical, ReceiptText, Layers, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
@@ -72,6 +72,16 @@ export function BillDetail() {
       setDeleteTarget(null);
     },
     onError: () => toast.error("Erro ao remover parcelamento"),
+  });
+
+  const toggleForecastMutation = useMutation({
+    mutationFn: ({ id, isForecast }: { id: string; isForecast: boolean }) =>
+      cardsService.updateTransactionForecast(id, isForecast),
+    onSuccess: (_, { isForecast }) => {
+      queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
+      toast.success(isForecast ? "Marcado como previsão" : "Previsão removida");
+    },
+    onError: () => toast.error("Erro ao atualizar lançamento"),
   });
 
   const updateStatusMutation = useMutation({
@@ -208,6 +218,7 @@ export function BillDetail() {
               key={tx.id}
               tx={tx}
               onDelete={(target) => setDeleteTarget(target)}
+              onToggleForecast={(id, val) => toggleForecastMutation.mutate({ id, isForecast: val })}
               currentUserId={user?.id ?? ""}
               partnerFirstName={partnerFirstName}
               hasCouple={hasCouple}
@@ -277,17 +288,25 @@ export function BillDetail() {
 function TransactionRow({
   tx,
   onDelete,
+  onToggleForecast,
   currentUserId,
   partnerFirstName,
   hasCouple,
 }: {
   tx: CreditCardTransaction;
   onDelete: (target: DeleteTarget) => void;
+  onToggleForecast: (id: string, isForecast: boolean) => void;
   currentUserId: string;
   partnerFirstName: string;
   hasCouple: boolean;
 }) {
   const isOwner = tx.user_id === currentUserId;
+  const isLastInstallment = tx.is_installment && tx.is_last_installment;
+  const titleColor = isLastInstallment
+    ? "text-[hsl(var(--success))]"
+    : tx.is_forecast
+    ? "text-orange-400"
+    : undefined;
 
   return (
     <div
@@ -318,15 +337,21 @@ function TransactionRow({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5 flex-wrap">
-          <p className="text-sm font-medium truncate">{tx.title}</p>
+          <p className={cn("text-sm font-medium truncate", titleColor)}>{tx.title}</p>
           {tx.is_installment && (
             <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
               {tx.installment_number}/{tx.installment_total}x
             </Badge>
           )}
-          {tx.is_last_installment && tx.is_installment && (
-            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-primary/20 text-primary border-0">
+          {isLastInstallment && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))] border-0">
               última
+            </Badge>
+          )}
+          {tx.is_forecast && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-orange-400/15 text-orange-400 border-0 flex items-center gap-0.5">
+              <Clock className="w-2.5 h-2.5" />
+              previsão
             </Badge>
           )}
           {hasCouple && (
@@ -362,6 +387,10 @@ function TransactionRow({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={() => onToggleForecast(tx.id, !tx.is_forecast)}>
+            <Clock className="w-4 h-4 mr-2 text-orange-400" />
+            {tx.is_forecast ? "Remover previsão" : "Marcar como previsão"}
+          </DropdownMenuItem>
           <DropdownMenuItem
             className="text-destructive focus:text-destructive"
             onClick={() => onDelete({ type: "single", tx })}

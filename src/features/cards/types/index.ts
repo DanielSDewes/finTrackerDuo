@@ -50,6 +50,7 @@ export type CreditCardTransaction = {
   is_last_installment: boolean;
   is_shared: boolean;
   shared_group_id: string | null;
+  is_forecast: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
