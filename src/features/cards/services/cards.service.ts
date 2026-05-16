@@ -121,15 +121,38 @@ export const cardsService = {
 
   async recalculateBillTotal(billId: string) {
     const supabase = createClient();
+
+    // Resolve the card owner so we can split amounts per user
+    const { data: billRow } = await supabase
+      .from("credit_card_bills")
+      .select("card_id")
+      .eq("id", billId)
+      .single();
+
+    const { data: cardRow } = await supabase
+      .from("credit_cards")
+      .select("user_id")
+      .eq("id", billRow?.card_id ?? "")
+      .single();
+
+    const ownerId = cardRow?.user_id ?? null;
+
     const { data } = await supabase
       .from("credit_card_transactions")
-      .select("amount")
+      .select("amount, user_id")
       .eq("bill_id", billId)
       .is("deleted_at", null);
-    const total = data?.reduce((s, t) => s + t.amount, 0) ?? 0;
+
+    let total = 0, ownerAmount = 0, partnerAmount = 0;
+    for (const tx of data ?? []) {
+      total += tx.amount;
+      if (ownerId && tx.user_id === ownerId) ownerAmount += tx.amount;
+      else partnerAmount += tx.amount;
+    }
+
     await supabase
       .from("credit_card_bills")
-      .update({ total_amount: total })
+      .update({ total_amount: total, owner_amount: ownerAmount, partner_amount: partnerAmount })
       .eq("id", billId);
   },
 
@@ -228,54 +251,116 @@ export const cardsService = {
     partnerId: string,
     coupleId: string
   ) {
-    const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
+    const { is_installment, installment_total } = input;
     const sharedGroupId = crypto.randomUUID();
-    const half = +(input.amount / 2).toFixed(2);
 
-    const base = {
-      bill_id: bill.id,
-      card_id: cardId,
-      couple_id: coupleId,
-      title: input.title,
-      description: input.description ?? null,
-      amount: half,
-      category_id: input.category_id ?? null,
-      date: input.date,
-      is_installment: false,
-      installment_number: 1,
-      installment_total: 1,
-      is_last_installment: true,
-      is_shared: true,
-      shared_group_id: sharedGroupId,
-    };
+    if (is_installment && installment_total > 1) {
+      const installmentGroupId = crypto.randomUUID();
+      const perInstallment = +(input.amount / installment_total).toFixed(2);
+      const half = +(perInstallment / 2).toFixed(2);
+      const billsUpdated = new Set<string>();
 
-    const supabase = createClient();
-    const { error } = await supabase.from("credit_card_transactions").insert([
-      { ...base, user_id: userId },
-      { ...base, user_id: partnerId },
-    ]);
-    if (error) throw error;
-    await this.recalculateBillTotal(bill.id);
+      for (let i = 1; i <= installment_total; i++) {
+        const rawMonth = billMonth + i - 2;
+        const targetMonth = (((rawMonth % 12) + 12) % 12) + 1;
+        const targetYear = billYear + Math.floor((billMonth + i - 2) / 12);
+
+        const bill = await this.findOrCreateBill(cardId, targetMonth, targetYear);
+
+        const base = {
+          bill_id: bill.id,
+          card_id: cardId,
+          couple_id: coupleId,
+          title: input.title,
+          description: input.description ?? null,
+          amount: half,
+          category_id: input.category_id ?? null,
+          date: input.date,
+          is_installment: true,
+          installment_group_id: installmentGroupId,
+          installment_number: i,
+          installment_total,
+          is_last_installment: i === installment_total,
+          is_shared: true,
+          shared_group_id: sharedGroupId,
+        };
+
+        const supabase = createClient();
+        const { error } = await supabase.from("credit_card_transactions").insert([
+          { ...base, user_id: userId },
+          { ...base, user_id: partnerId },
+        ]);
+        if (error) throw error;
+        billsUpdated.add(bill.id);
+      }
+
+      for (const billId of billsUpdated) {
+        await this.recalculateBillTotal(billId);
+      }
+    } else {
+      const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
+      const half = +(input.amount / 2).toFixed(2);
+
+      const base = {
+        bill_id: bill.id,
+        card_id: cardId,
+        couple_id: coupleId,
+        title: input.title,
+        description: input.description ?? null,
+        amount: half,
+        category_id: input.category_id ?? null,
+        date: input.date,
+        is_installment: false,
+        installment_number: 1,
+        installment_total: 1,
+        is_last_installment: true,
+        is_shared: true,
+        shared_group_id: sharedGroupId,
+      };
+
+      const supabase = createClient();
+      const { error } = await supabase.from("credit_card_transactions").insert([
+        { ...base, user_id: userId },
+        { ...base, user_id: partnerId },
+      ]);
+      if (error) throw error;
+      await this.recalculateBillTotal(bill.id);
+    }
   },
 
-  async deleteTransaction(id: string, _billId: string) {
+  async deleteTransaction(id: string, billId: string) {
     const supabase = createClient();
     // SECURITY DEFINER RPC bypasses the RLS UPDATE+SELECT conflict and
-    // recalculates the bill total in the same transaction.
+    // recalculates total_amount. We then resync owner/partner amounts.
     const { error } = await supabase.rpc("soft_delete_card_transaction", {
       p_transaction_id: id,
     });
     if (error) throw error;
+    if (billId) await this.recalculateBillTotal(billId);
   },
 
   async deleteInstallmentGroup(groupId: string) {
     const supabase = createClient();
-    // RPC handles soft-delete of all installments and recalculates every
-    // affected bill total atomically.
+
+    // Collect all affected bill IDs before the RPC wipes the rows
+    const { data: txRows } = await createClient()
+      .from("credit_card_transactions")
+      .select("bill_id")
+      .eq("installment_group_id", groupId)
+      .is("deleted_at", null);
+
+    const billIds = [...new Set((txRows ?? []).map((t) => t.bill_id as string))];
+
+    // RPC handles soft-delete of all installments and recalculates total_amount
     const { error } = await supabase.rpc("soft_delete_card_installment_group", {
       p_group_id: groupId,
     });
     if (error) throw error;
+
+    // Resync owner/partner amounts for every affected bill
+    for (const billId of billIds) {
+      await this.recalculateBillTotal(billId);
+    }
   },
 
   // ─── Dashboard summary ────────────────────────────────────────────────────
@@ -289,15 +374,23 @@ export const cardsService = {
       cards.map(async (card) => {
         const { data } = await supabase
           .from("credit_card_bills")
-          .select("total_amount, status")
+          .select("total_amount, owner_amount, partner_amount, status")
           .eq("card_id", card.id)
           .eq("month", month)
           .eq("year", year)
           .maybeSingle();
 
+        // Use per-user stored amounts to avoid scanning all transactions.
+        // Falls back to total_amount for bills created before the new columns existed.
+        const userAmount = data
+          ? card.user_id === userId
+            ? (data.owner_amount ?? data.total_amount)
+            : (data.partner_amount ?? 0)
+          : 0;
+
         return {
           card,
-          monthTotal: data?.total_amount ?? 0,
+          monthTotal: userAmount,
           billStatus: data?.status ?? null,
         };
       })

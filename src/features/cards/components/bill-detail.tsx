@@ -32,6 +32,11 @@ export function BillDetail() {
   const { user, couple } = useAuthStore();
   const queryClient = useQueryClient();
 
+  const partner = couple?.status === "active"
+    ? (couple.owner_id === user?.id ? couple.partner : couple.owner) as { name?: string } | undefined
+    : undefined;
+  const partnerFirstName = partner?.name?.split(" ")[0] ?? "Parceiro(a)";
+
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -99,6 +104,10 @@ export function BillDetail() {
   );
 
   const total = transactions.reduce((s, t) => s + t.amount, 0);
+  const myTotal = user
+    ? transactions.filter((t) => t.user_id === user.id).reduce((s, t) => s + t.amount, 0)
+    : total;
+  const hasCouple = couple?.status === "active";
   const billFromData = selectedBillId ? { id: selectedBillId } : null;
 
   // Find current bill status from transactions context — we'll read it from the bills query cache
@@ -120,6 +129,14 @@ export function BillDetail() {
               <span className="font-semibold text-foreground">
                 {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
               </span>
+              {hasCouple && myTotal !== total && (
+                <> •{" "}
+                  <span className="font-semibold text-primary">
+                    sua parte{" "}
+                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(myTotal)}
+                  </span>
+                </>
+              )}
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -191,6 +208,9 @@ export function BillDetail() {
               key={tx.id}
               tx={tx}
               onDelete={(target) => setDeleteTarget(target)}
+              currentUserId={user?.id ?? ""}
+              partnerFirstName={partnerFirstName}
+              hasCouple={hasCouple}
             />
           ))
         )}
@@ -257,10 +277,18 @@ export function BillDetail() {
 function TransactionRow({
   tx,
   onDelete,
+  currentUserId,
+  partnerFirstName,
+  hasCouple,
 }: {
   tx: CreditCardTransaction;
   onDelete: (target: DeleteTarget) => void;
+  currentUserId: string;
+  partnerFirstName: string;
+  hasCouple: boolean;
 }) {
+  const isOwner = tx.user_id === currentUserId;
+
   return (
     <div
       className={cn(
@@ -301,9 +329,17 @@ function TransactionRow({
               última
             </Badge>
           )}
+          {hasCouple && (
+            <Badge
+              variant={isOwner ? "default" : "secondary"}
+              className="text-[10px] px-1.5 py-0 h-4 shrink-0"
+            >
+              {isOwner ? "Você" : partnerFirstName}
+            </Badge>
+          )}
           {tx.is_shared && (
             <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
-              compartilhado
+              dividido
             </Badge>
           )}
         </div>

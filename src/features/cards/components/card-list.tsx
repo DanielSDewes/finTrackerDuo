@@ -39,7 +39,7 @@ export function CardList() {
     mutationFn: (id: string) => cardsService.deleteCard(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cards"] });
-      if (deleteCard?.id === selectedCardId) setSelectedCard(null);
+      if (deleteCard?.id === selectedCardId) setSelectedCard(null, null);
       toast.success("Cartão removido");
       setDeleteCard(null);
     },
@@ -89,7 +89,12 @@ export function CardList() {
                 card={card}
                 size="md"
                 selected={selectedCardId === card.id}
-                onClick={() => setSelectedCard(selectedCardId === card.id ? null : card.id)}
+                onClick={() =>
+                  setSelectedCard(
+                    selectedCardId === card.id ? null : card.id,
+                    selectedCardId === card.id ? null : card.user_id
+                  )
+                }
               />
 
               {/* Usage bar */}

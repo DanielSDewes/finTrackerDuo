@@ -38,8 +38,9 @@ function buildMonthWindow(bills: CreditCardBill[]) {
 }
 
 export function BillList() {
-  const { selectedCardId, selectedBillId, selectedBillMonth, selectedBillYear, setSelectedBill } = useCardsStore();
+  const { selectedCardId, selectedCardOwnerId, selectedBillId, selectedBillMonth, selectedBillYear, setSelectedBill } = useCardsStore();
   const { user } = useAuthStore();
+  const isCardOwner = !!user && user.id === selectedCardOwnerId;
 
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ["bills", selectedCardId],
@@ -121,11 +122,24 @@ export function BillList() {
                   </div>
                 </div>
                 <div className="text-right">
-                  {bill ? (
-                    <p className="text-sm font-semibold tabular-nums">
-                      {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(bill.total_amount)}
-                    </p>
-                  ) : (
+                  {bill ? (() => {
+                    const userAmt = isCardOwner
+                      ? (bill.owner_amount ?? bill.total_amount)
+                      : (bill.partner_amount ?? 0);
+                    const showTotal = bill.total_amount !== userAmt && bill.total_amount > 0;
+                    return (
+                      <>
+                        <p className="text-sm font-semibold tabular-nums">
+                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(userAmt)}
+                        </p>
+                        {showTotal && (
+                          <p className="text-[10px] text-muted-foreground tabular-nums">
+                            total {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(bill.total_amount)}
+                          </p>
+                        )}
+                      </>
+                    );
+                  })() : (
                     <p className="text-xs text-muted-foreground">sem fatura</p>
                   )}
                 </div>

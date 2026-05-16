@@ -26,6 +26,8 @@ export type CreditCardBill = {
   year: number;
   status: BillStatus;
   total_amount: number;
+  owner_amount: number;   // sum of transactions owned by the card's user_id
+  partner_amount: number; // sum of transactions owned by the partner
   created_at: string;
   updated_at: string;
 };
