@@ -80,14 +80,17 @@ export function GoalForm({ goal, onSuccess }: GoalFormProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {GOAL_CATEGORIES.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>
-                    <span className="inline-flex items-center gap-2">
-                      <span aria-hidden>{c.icon}</span>
-                      {c.label}
-                    </span>
-                  </SelectItem>
-                ))}
+                {GOAL_CATEGORIES.map((c) => {
+                  const Icon = c.icon;
+                  return (
+                    <SelectItem key={c.value} value={c.value}>
+                      <span className="inline-flex items-center gap-2">
+                        <Icon className="w-4 h-4 shrink-0" aria-hidden />
+                        {c.label}
+                      </span>
+                    </SelectItem>
+                  );
+                })}
               </SelectContent>
             </Select>
           )}

@@ -119,6 +119,7 @@ export function SubgoalDetail() {
   const itemsPercentage = totalCount === 0 ? 0 : (doneCount / totalCount) * 100;
   const valuePercentage = calculatePercentage(doneEstimated, totalEstimated);
   const meta = getGoalCategory(goal.category);
+  const Icon = meta.icon;
 
   const openCreate = () => { setEditSubgoal(null); setFormOpen(true); };
 
@@ -129,10 +130,10 @@ export function SubgoalDetail() {
         <div className="flex items-start justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <div
-              className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shrink-0"
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
               style={{ backgroundColor: `${goal.color}22`, color: goal.color }}
             >
-              {meta.icon}
+              <Icon className="w-5 h-5" strokeWidth={2} />
             </div>
             <div className="min-w-0">
               <h2 className="font-semibold text-sm truncate">{goal.title}</h2>

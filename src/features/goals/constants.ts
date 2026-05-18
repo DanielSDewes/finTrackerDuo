@@ -1,19 +1,29 @@
+import {
+  Plane,
+  Car,
+  House,
+  Shield,
+  Sunset,
+  GraduationCap,
+  Target,
+  type LucideIcon,
+} from "lucide-react";
 import type { GoalCategory } from "@/types";
 
 type GoalCategoryMeta = {
   value: GoalCategory;
   label: string;
-  icon: string;
+  icon: LucideIcon;
 };
 
 export const GOAL_CATEGORIES: readonly GoalCategoryMeta[] = [
-  { value: "travel", label: "Viagem", icon: "✈" },
-  { value: "car", label: "Carro", icon: "🚗" },
-  { value: "house", label: "Casa/Imóvel", icon: "🏠" },
-  { value: "emergency", label: "Emergência", icon: "🛡" },
-  { value: "retirement", label: "Aposentadoria", icon: "🌅" },
-  { value: "education", label: "Educação", icon: "📚" },
-  { value: "other", label: "Outro", icon: "🎯" },
+  { value: "travel",     label: "Viagem",       icon: Plane },
+  { value: "car",        label: "Carro",        icon: Car },
+  { value: "house",      label: "Casa/Imóvel",  icon: House },
+  { value: "emergency",  label: "Emergência",   icon: Shield },
+  { value: "retirement", label: "Aposentadoria", icon: Sunset },
+  { value: "education",  label: "Educação",     icon: GraduationCap },
+  { value: "other",      label: "Outro",        icon: Target },
 ] as const;
 
 const byValue = new Map(GOAL_CATEGORIES.map((c) => [c.value, c]));
