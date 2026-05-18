@@ -20,7 +20,7 @@ Visão consolidada, cartões com faturas reais, metas com sub-itens, investiment
 7. [Padrões de código](#7-padrões-de-código)
 8. [Setup local](#8-setup-local)
 9. [Deploy](#9-deploy-vercel--supabase)
-10. [Migrations](#10-migrations-supabase)
+10. [Banco de dados](#10-banco-de-dados)
 
 ---
 
@@ -225,15 +225,12 @@ src/
 ```
 
 ```
-supabase/migrations/
-├── 001_initial_schema.sql              # Schema base + RLS de todas as tabelas
-├── 002_credit_cards.sql                # Cartões + faturas + transações
-├── 003_add_presente_category.sql
-├── 004_fix_invite_rls.sql              # Casal: convite por token
-├── 005_partner_transaction_rls.sql     # Parceiro pode lançar pro outro
-├── 006_credit_card_partner_and_pet.sql
-├── 007_soft_delete_card_transactions.sql # RPC SECURITY DEFINER pra evitar conflito UPDATE+SELECT em RLS
-└── 008_goal_subgoals.sql               # Sub-metas com link, valor, completed
+supabase/
+└── schema.sql          # Setup completo do banco — copie e cole no
+                        # SQL Editor do Supabase e execute uma única vez.
+                        # Contém: extensões, 14 tabelas, índices, triggers,
+                        # 48 políticas RLS, 4 RPCs SECURITY DEFINER, grants
+                        # e seed das categorias padrão.
 ```
 
 ---
@@ -586,7 +583,7 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000   # ou domínio Vercel em prod
 
 ## 9. Deploy (Vercel + Supabase)
 
-1. **Supabase:** crie o projeto, copie URL e `anon key`, e rode as migrations em ordem (ver [seção 10](#10-migrations-supabase)).
+1. **Supabase:** crie o projeto, copie URL e `anon key`. Em **SQL Editor**, cole o conteúdo de [`supabase/schema.sql`](supabase/schema.sql) e clique **Run** uma vez. Isso cria todas as tabelas, RLS, RPCs, triggers e seeds.
 2. **Vercel:** importe o repositório. Adicione as três env vars (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL=https://seu-dominio.vercel.app`).
 3. **Supabase → Auth → URL Configuration:** adicione `https://seu-dominio.vercel.app/auth/callback` em "Redirect URLs". Sem isso, o link de confirmação de e-mail e o reset de senha caem em URL errada.
 4. **Deploy.** A primeira build deve passar com 18 rotas (15 static + 1 dynamic + middleware proxy).
@@ -595,20 +592,30 @@ Validação local antes do push: `npm run build` deve terminar com `✓ Compiled
 
 ---
 
-## 10. Migrations (Supabase)
+## 10. Banco de dados
 
-Rode em ordem na Supabase SQL Editor (ou via `supabase db push` se usando CLI):
+Todo o schema vive em um único arquivo: [`supabase/schema.sql`](supabase/schema.sql).
 
-| # | Arquivo | O que faz |
-|---|---|---|
-| 001 | `001_initial_schema.sql` | Tabelas base (profiles, couples, accounts, transactions, goals, …) + RLS + categorias seed |
-| 002 | `002_credit_cards.sql` | Cartões + faturas + transações de cartão + RLS |
-| 003 | `003_add_presente_category.sql` | Seed de categoria "Presente" |
-| 004 | `004_fix_invite_rls.sql` | Corrige RLS de aceitar convite por token |
-| 005 | `005_partner_transaction_rls.sql` | Permite lançar transação na conta do parceiro |
-| 006 | `006_credit_card_partner_and_pet.sql` | Lançamento de cartão para parceiro + categoria pet |
-| 007 | `007_soft_delete_card_transactions.sql` | RPCs SECURITY DEFINER pra soft delete |
-| 008 | `008_goal_subgoals.sql` | **Sub-metas** com link, valor, completed + RLS + trigger de `completed_at` |
+**Para um banco novo:**
+1. Abra o SQL Editor do Supabase.
+2. Cole o conteúdo de `schema.sql` e clique **Run**.
+3. Pronto — o banco está pronto para o app rodar.
+
+**O que está dentro** (na ordem de execução):
+
+| Seção | Conteúdo |
+|---|---|
+| 1. Extensões | `uuid-ossp`, `pgcrypto` |
+| 2. Tabelas (14) | `profiles`, `couples`, `accounts`, `categories`, `transactions`, `future_transactions`, `investments`, `goals`, `goal_contributions`, `goal_subgoals`, `notifications`, `credit_cards`, `credit_card_bills`, `credit_card_transactions` |
+| 3. Índices | 24 índices em FKs e colunas filtráveis (date, deleted_at, etc.) |
+| 4. Triggers | `handle_updated_at` (9 tabelas), `handle_new_user` (cria profile ao registrar), `set_goal_subgoals_timestamps` (sincroniza `completed_at`) |
+| 5. RLS | Habilita Row Level Security em todas as 14 tabelas |
+| 6. Políticas | 48 políticas SELECT/INSERT/UPDATE/DELETE — autorização baseada em `auth.uid()` e relação de casal |
+| 7. RPCs SECURITY DEFINER | `soft_delete_transaction`, `soft_delete_partner_transaction`, `soft_delete_card_transaction`, `soft_delete_card_installment_group` |
+| 8. Grants | `USAGE` no schema public e CRUD para role `authenticated` |
+| 9. Seed | 20 categorias padrão (Salário, Moradia, Alimentação, Pet, Renda Fixa, etc.) |
+
+**Aviso:** o script não é idempotente — não rode duas vezes no mesmo banco. Para um banco existente em produção, prefira migrações incrementais.
 
 ---
 

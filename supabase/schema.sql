@@ -1,0 +1,960 @@
+-- =============================================================================
+-- FinTrackerDuo — Schema completo
+-- =============================================================================
+-- Setup único para um banco novo: copie todo este arquivo na Supabase SQL
+-- Editor e clique "Run". Cria todas as tabelas, RLS, triggers, RPCs e seed
+-- de categorias padrão.
+--
+-- IMPORTANTE: este script NÃO é idempotente. Use apenas em um banco vazio.
+-- Para um banco existente, prefira migrations incrementais.
+-- =============================================================================
+
+
+-- =============================================================================
+-- 1. EXTENSÕES
+-- =============================================================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
+
+-- =============================================================================
+-- 2. TABELAS — em ordem de dependência
+-- =============================================================================
+
+-- ---- profiles (espelha auth.users) ----
+CREATE TABLE profiles (
+  id          UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  name        TEXT NOT NULL,
+  email       TEXT NOT NULL,
+  avatar_url  TEXT,
+  phone       TEXT,
+  currency    TEXT NOT NULL DEFAULT 'BRL',
+  locale      TEXT NOT NULL DEFAULT 'pt-BR',
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- couples (vínculo entre dois usuários) ----
+CREATE TABLE couples (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  owner_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  partner_id    UUID REFERENCES profiles(id) ON DELETE SET NULL,
+  status        TEXT NOT NULL DEFAULT 'pending'
+                  CHECK (status IN ('pending', 'active', 'dissolved')),
+  invite_token  TEXT UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'),
+  invite_email  TEXT,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- accounts (contas bancárias / carteiras) ----
+CREATE TABLE accounts (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id   UUID REFERENCES couples(id) ON DELETE SET NULL,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'checking'
+                CHECK (type IN ('checking', 'savings', 'investment', 'credit', 'cash', 'other')),
+  balance     DECIMAL(15,2) NOT NULL DEFAULT 0,
+  color       TEXT DEFAULT '#6366f1',
+  icon        TEXT DEFAULT 'wallet',
+  is_shared   BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active   BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- categories (income/expense/investment) ----
+CREATE TABLE categories (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id   UUID REFERENCES couples(id) ON DELETE SET NULL,
+  name        TEXT NOT NULL,
+  type        TEXT NOT NULL CHECK (type IN ('income', 'expense', 'investment')),
+  color       TEXT NOT NULL DEFAULT '#6366f1',
+  icon        TEXT NOT NULL DEFAULT 'tag',
+  is_default  BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- transactions (movimentações reais) ----
+CREATE TABLE transactions (
+  id                   UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id              UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id            UUID REFERENCES couples(id) ON DELETE SET NULL,
+  account_id           UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  category_id          UUID REFERENCES categories(id) ON DELETE SET NULL,
+  type                 TEXT NOT NULL CHECK (type IN ('income', 'expense', 'transfer')),
+  amount               DECIMAL(15,2) NOT NULL,
+  description          TEXT NOT NULL,
+  notes                TEXT,
+  date                 DATE NOT NULL,
+  is_shared            BOOLEAN NOT NULL DEFAULT FALSE,
+  is_recurring         BOOLEAN NOT NULL DEFAULT FALSE,
+  recurrence_type      TEXT CHECK (recurrence_type IN ('daily', 'weekly', 'monthly', 'yearly')),
+  recurrence_end_date  DATE,
+  status               TEXT NOT NULL DEFAULT 'completed'
+                         CHECK (status IN ('pending', 'completed', 'cancelled')),
+  tags                 TEXT[] DEFAULT '{}',
+  attachments          TEXT[] DEFAULT '{}',
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at           TIMESTAMPTZ
+);
+
+-- ---- future_transactions (agendadas) ----
+CREATE TABLE future_transactions (
+  id                       UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id                  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id                UUID REFERENCES couples(id) ON DELETE SET NULL,
+  account_id               UUID REFERENCES accounts(id) ON DELETE SET NULL,
+  category_id              UUID REFERENCES categories(id) ON DELETE SET NULL,
+  type                     TEXT NOT NULL CHECK (type IN ('income', 'expense')),
+  amount                   DECIMAL(15,2) NOT NULL,
+  description              TEXT NOT NULL,
+  scheduled_date           DATE NOT NULL,
+  is_shared                BOOLEAN NOT NULL DEFAULT FALSE,
+  is_recurring             BOOLEAN NOT NULL DEFAULT FALSE,
+  recurrence_type          TEXT CHECK (recurrence_type IN ('daily', 'weekly', 'monthly', 'yearly')),
+  recurrence_end_date      DATE,
+  status                   TEXT NOT NULL DEFAULT 'pending'
+                             CHECK (status IN ('pending', 'processed', 'cancelled')),
+  processed_transaction_id UUID REFERENCES transactions(id),
+  created_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- investments ----
+CREATE TABLE investments (
+  id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id             UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id           UUID REFERENCES couples(id) ON DELETE SET NULL,
+  asset_class         TEXT NOT NULL
+                        CHECK (asset_class IN ('fixed_income', 'variable_income', 'crypto', 'real_estate', 'other')),
+  subcategory         TEXT NOT NULL,
+  broker              TEXT,
+  asset_name          TEXT NOT NULL,
+  ticker              TEXT,
+  quantity            DECIMAL(18,8) NOT NULL DEFAULT 0,
+  average_price       DECIMAL(15,6) NOT NULL DEFAULT 0,
+  current_price       DECIMAL(15,6) NOT NULL DEFAULT 0,
+  invested_amount     DECIMAL(15,2) NOT NULL DEFAULT 0,
+  current_value       DECIMAL(15,2) NOT NULL DEFAULT 0,
+  profitability       DECIMAL(10,4) DEFAULT 0,
+  dividends_received  DECIMAL(15,2) NOT NULL DEFAULT 0,
+  is_shared           BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+  purchase_date       DATE,
+  maturity_date       DATE,
+  notes               TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- goals (metas financeiras) ----
+CREATE TABLE goals (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id       UUID REFERENCES couples(id) ON DELETE SET NULL,
+  title           TEXT NOT NULL,
+  description     TEXT,
+  category        TEXT NOT NULL DEFAULT 'other'
+                    CHECK (category IN ('travel', 'car', 'house', 'emergency', 'retirement', 'education', 'other')),
+  target_amount   DECIMAL(15,2) NOT NULL,
+  current_amount  DECIMAL(15,2) NOT NULL DEFAULT 0,
+  deadline        DATE,
+  color           TEXT DEFAULT '#6366f1',
+  icon            TEXT DEFAULT 'target',
+  is_shared       BOOLEAN NOT NULL DEFAULT FALSE,
+  status          TEXT NOT NULL DEFAULT 'active'
+                    CHECK (status IN ('active', 'completed', 'paused', 'cancelled')),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- goal_contributions (aportes) ----
+CREATE TABLE goal_contributions (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  goal_id         UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  amount          DECIMAL(15,2) NOT NULL,
+  notes           TEXT,
+  contributed_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- goal_subgoals (sub-itens com link, valor e checkbox) ----
+CREATE TABLE goal_subgoals (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  goal_id       UUID NOT NULL REFERENCES goals(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id     UUID REFERENCES couples(id) ON DELETE SET NULL,
+  title         TEXT NOT NULL,
+  amount        DECIMAL(15,2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
+  link          TEXT,
+  notes         TEXT,
+  completed     BOOLEAN NOT NULL DEFAULT FALSE,
+  completed_at  TIMESTAMPTZ,
+  position      INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- notifications ----
+CREATE TABLE notifications (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  title       TEXT NOT NULL,
+  message     TEXT NOT NULL,
+  type        TEXT NOT NULL DEFAULT 'info'
+                CHECK (type IN ('info', 'warning', 'success', 'error')),
+  read        BOOLEAN NOT NULL DEFAULT FALSE,
+  action_url  TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- credit_cards ----
+CREATE TABLE credit_cards (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id     UUID REFERENCES couples(id) ON DELETE SET NULL,
+  name          TEXT NOT NULL,
+  brand         TEXT NOT NULL DEFAULT 'other'
+                  CHECK (brand IN ('visa', 'mastercard', 'elo', 'amex', 'hipercard', 'other')),
+  color         TEXT NOT NULL DEFAULT '#6366f1',
+  limit_amount  DECIMAL(15,2) NOT NULL DEFAULT 0,
+  closing_day   INTEGER NOT NULL CHECK (closing_day BETWEEN 1 AND 31),
+  due_day       INTEGER NOT NULL CHECK (due_day BETWEEN 1 AND 31),
+  is_shared     BOOLEAN NOT NULL DEFAULT FALSE,
+  is_active     BOOLEAN NOT NULL DEFAULT TRUE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- credit_card_bills (faturas mensais) ----
+CREATE TABLE credit_card_bills (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  card_id         UUID NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE,
+  month           INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+  year            INTEGER NOT NULL CHECK (year >= 2020),
+  status          TEXT NOT NULL DEFAULT 'open'
+                    CHECK (status IN ('open', 'closed', 'paid', 'overdue')),
+  total_amount    DECIMAL(15,2) NOT NULL DEFAULT 0,
+  owner_amount    DECIMAL(15,2) NOT NULL DEFAULT 0,  -- soma das tx do dono do cartão
+  partner_amount  DECIMAL(15,2) NOT NULL DEFAULT 0,  -- soma das tx do parceiro
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (card_id, month, year)
+);
+
+-- ---- credit_card_transactions (lançamentos da fatura) ----
+CREATE TABLE credit_card_transactions (
+  id                    UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  bill_id               UUID NOT NULL REFERENCES credit_card_bills(id) ON DELETE CASCADE,
+  card_id               UUID NOT NULL REFERENCES credit_cards(id) ON DELETE CASCADE,
+  user_id               UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id             UUID REFERENCES couples(id) ON DELETE SET NULL,
+  title                 TEXT NOT NULL,
+  description           TEXT,
+  amount                DECIMAL(15,2) NOT NULL CHECK (amount > 0),
+  category_id           UUID REFERENCES categories(id) ON DELETE SET NULL,
+  date                  DATE NOT NULL DEFAULT CURRENT_DATE,
+  is_installment        BOOLEAN NOT NULL DEFAULT FALSE,
+  installment_group_id  UUID,
+  installment_number    INTEGER NOT NULL DEFAULT 1,
+  installment_total     INTEGER NOT NULL DEFAULT 1,
+  is_last_installment   BOOLEAN NOT NULL DEFAULT TRUE,
+  is_shared             BOOLEAN NOT NULL DEFAULT FALSE,
+  shared_group_id       UUID,
+  is_forecast           BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  deleted_at            TIMESTAMPTZ
+);
+
+
+-- =============================================================================
+-- 3. INDEXES
+-- =============================================================================
+CREATE INDEX idx_transactions_user_id           ON transactions(user_id);
+CREATE INDEX idx_transactions_couple_id         ON transactions(couple_id);
+CREATE INDEX idx_transactions_date              ON transactions(date DESC);
+CREATE INDEX idx_transactions_type              ON transactions(type);
+CREATE INDEX idx_transactions_deleted           ON transactions(deleted_at);
+CREATE INDEX idx_future_transactions_user_id    ON future_transactions(user_id);
+CREATE INDEX idx_future_transactions_scheduled  ON future_transactions(scheduled_date);
+CREATE INDEX idx_investments_user_id            ON investments(user_id);
+CREATE INDEX idx_goals_user_id                  ON goals(user_id);
+CREATE INDEX idx_accounts_user_id               ON accounts(user_id);
+CREATE INDEX idx_categories_user_id             ON categories(user_id);
+CREATE INDEX idx_goal_subgoals_goal_id          ON goal_subgoals(goal_id);
+CREATE INDEX idx_goal_subgoals_user_id          ON goal_subgoals(user_id);
+CREATE INDEX idx_credit_cards_user_id           ON credit_cards(user_id);
+CREATE INDEX idx_credit_cards_couple_id         ON credit_cards(couple_id);
+CREATE INDEX idx_credit_card_bills_card_id      ON credit_card_bills(card_id);
+CREATE INDEX idx_credit_card_bills_month_year   ON credit_card_bills(year, month);
+CREATE INDEX idx_cct_bill_id                    ON credit_card_transactions(bill_id);
+CREATE INDEX idx_cct_card_id                    ON credit_card_transactions(card_id);
+CREATE INDEX idx_cct_user_id                    ON credit_card_transactions(user_id);
+CREATE INDEX idx_cct_installment_group          ON credit_card_transactions(installment_group_id);
+CREATE INDEX idx_cct_shared_group               ON credit_card_transactions(shared_group_id);
+CREATE INDEX idx_cct_deleted_at                 ON credit_card_transactions(deleted_at);
+
+
+-- =============================================================================
+-- 4. TRIGGERS
+-- =============================================================================
+
+-- ---- updated_at genérico ----
+CREATE OR REPLACE FUNCTION handle_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_couples_updated_at
+  BEFORE UPDATE ON couples
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_accounts_updated_at
+  BEFORE UPDATE ON accounts
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_transactions_updated_at
+  BEFORE UPDATE ON transactions
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_investments_updated_at
+  BEFORE UPDATE ON investments
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_goals_updated_at
+  BEFORE UPDATE ON goals
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_credit_cards_updated_at
+  BEFORE UPDATE ON credit_cards
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_credit_card_bills_updated_at
+  BEFORE UPDATE ON credit_card_bills
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_credit_card_transactions_updated_at
+  BEFORE UPDATE ON credit_card_transactions
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+-- ---- novo usuário Supabase → cria profile automaticamente ----
+-- ON CONFLICT + EXCEPTION garantem que falhas no profile não bloqueiem o
+-- cadastro do usuário (caso de race condition ou retentativa do Supabase Auth).
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, name, email)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'name', split_part(NEW.email, '@', 1)),
+    NEW.email
+  )
+  ON CONFLICT (id) DO NOTHING;
+  RETURN NEW;
+EXCEPTION
+  WHEN OTHERS THEN
+    RAISE WARNING 'handle_new_user failed: % %', SQLERRM, SQLSTATE;
+    RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+  AFTER INSERT ON auth.users
+  FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+
+-- ---- goal_subgoals: mantém completed_at em sincronia com completed ----
+CREATE OR REPLACE FUNCTION set_goal_subgoals_timestamps()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  IF NEW.completed = TRUE AND (OLD.completed IS NULL OR OLD.completed = FALSE) THEN
+    NEW.completed_at = NOW();
+  ELSIF NEW.completed = FALSE THEN
+    NEW.completed_at = NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_goal_subgoals_timestamps
+  BEFORE UPDATE ON goal_subgoals
+  FOR EACH ROW EXECUTE FUNCTION set_goal_subgoals_timestamps();
+
+
+-- =============================================================================
+-- 5. RLS — habilita Row Level Security em todas as tabelas
+-- =============================================================================
+ALTER TABLE profiles                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE couples                   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE accounts                  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE categories                ENABLE ROW LEVEL SECURITY;
+ALTER TABLE transactions              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE future_transactions       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investments               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goals                     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goal_contributions        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE goal_subgoals             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notifications             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_cards              ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_card_bills         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE credit_card_transactions  ENABLE ROW LEVEL SECURITY;
+
+
+-- =============================================================================
+-- 6. POLÍTICAS DE RLS
+-- =============================================================================
+
+-- ---- profiles ----
+CREATE POLICY "Users can view own profile" ON profiles
+  FOR SELECT USING (auth.uid() = id);
+
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = id);
+
+-- ---- couples ----
+CREATE POLICY "Couple members can view couple" ON couples
+  FOR SELECT USING (auth.uid() = owner_id OR auth.uid() = partner_id);
+
+CREATE POLICY "Owner can create couple" ON couples
+  FOR INSERT WITH CHECK (auth.uid() = owner_id);
+
+CREATE POLICY "Members can update couple" ON couples
+  FOR UPDATE USING (auth.uid() = owner_id OR auth.uid() = partner_id);
+
+-- Permite que qualquer usuário autenticado encontre um convite pendente
+-- por invite_token (necessário pois o convidado ainda não é partner_id)
+CREATE POLICY "Anyone can view pending couple for invite lookup" ON couples
+  FOR SELECT USING (status = 'pending');
+
+-- Permite ao convidado aceitar o convite: USING valida a row antiga
+-- (ainda pending, sem partner), WITH CHECK valida a nova (vira active
+-- e o caller se torna o partner)
+CREATE POLICY "Authenticated user can accept pending invite" ON couples
+  FOR UPDATE
+  USING      (status = 'pending' AND partner_id IS NULL)
+  WITH CHECK (auth.uid() = partner_id AND status = 'active');
+
+-- ---- accounts ----
+CREATE POLICY "Users can view own accounts" ON accounts
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own accounts" ON accounts
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- categories ----
+CREATE POLICY "Users can view own and default categories" ON categories
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    is_default = TRUE OR
+    couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    )
+  );
+
+CREATE POLICY "Users can manage own categories" ON categories
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- transactions ----
+-- IMPORTANTE: policies separadas por operação. Um único FOR ALL com
+-- "deleted_at IS NULL" no USING quebra o soft-delete: o Postgres reusa
+-- o USING como WITH CHECK, e após setar deleted_at = NOW() a row deixa
+-- de satisfazer o filtro, fazendo o UPDATE falhar.
+CREATE POLICY "Users can view own transactions" ON transactions
+  FOR SELECT USING (
+    deleted_at IS NULL AND (
+      auth.uid() = user_id OR
+      (is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      ))
+    )
+  );
+
+CREATE POLICY "Users can insert own transactions" ON transactions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own transactions" ON transactions
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own transactions" ON transactions
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Membros do casal podem ver/criar/atualizar transações do parceiro
+-- (necessário para o modo "Lançar para o parceiro")
+CREATE POLICY "Couple members can view partner transactions" ON transactions
+  FOR SELECT USING (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active'
+        AND partner_id IS NOT NULL
+    )
+  );
+
+CREATE POLICY "Couple members can create partner transactions" ON transactions
+  FOR INSERT WITH CHECK (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active'
+        AND partner_id IS NOT NULL
+    )
+  );
+
+CREATE POLICY "Couple members can update partner transactions" ON transactions
+  FOR UPDATE USING (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active'
+        AND partner_id IS NOT NULL
+    )
+  );
+
+-- ---- future_transactions ----
+CREATE POLICY "Users can view own future transactions" ON future_transactions
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own future transactions" ON future_transactions
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- investments ----
+CREATE POLICY "Users can view own investments" ON investments
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own investments" ON investments
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- goals ----
+CREATE POLICY "Users can view own goals" ON goals
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own goals" ON goals
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- goal_contributions ----
+CREATE POLICY "Users can view goal contributions" ON goal_contributions
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    goal_id IN (SELECT id FROM goals WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can add own contributions" ON goal_contributions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- ---- goal_subgoals ----
+CREATE POLICY "Users can view own subgoals" ON goal_subgoals
+  FOR SELECT USING (
+    auth.uid() = user_id
+    OR goal_id IN (
+      SELECT id FROM goals
+      WHERE user_id = auth.uid()
+         OR (is_shared = TRUE AND couple_id IN (
+           SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+         ))
+    )
+  );
+
+CREATE POLICY "Users can insert own subgoals" ON goal_subgoals
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id
+    AND goal_id IN (
+      SELECT id FROM goals
+      WHERE user_id = auth.uid()
+         OR (is_shared = TRUE AND couple_id IN (
+           SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+         ))
+    )
+  );
+
+CREATE POLICY "Users can update own subgoals" ON goal_subgoals
+  FOR UPDATE USING (
+    auth.uid() = user_id
+    OR goal_id IN (
+      SELECT id FROM goals
+      WHERE is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Users can delete own subgoals" ON goal_subgoals
+  FOR DELETE USING (
+    auth.uid() = user_id
+    OR goal_id IN (
+      SELECT id FROM goals
+      WHERE is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      )
+    )
+  );
+
+-- ---- notifications ----
+CREATE POLICY "Users can view own notifications" ON notifications
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own notifications" ON notifications
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- ---- credit_cards ----
+CREATE POLICY "Users can view own credit cards" ON credit_cards
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can insert own credit cards" ON credit_cards
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own credit cards" ON credit_cards
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own credit cards" ON credit_cards
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- ---- credit_card_bills (acesso derivado do cartão) ----
+CREATE POLICY "Users can view own bills" ON credit_card_bills
+  FOR SELECT USING (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id = auth.uid()
+         OR (is_shared = TRUE AND couple_id IN (
+              SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+            ))
+    )
+  );
+
+CREATE POLICY "Users can insert own bills" ON credit_card_bills
+  FOR INSERT WITH CHECK (
+    card_id IN (SELECT id FROM credit_cards WHERE user_id = auth.uid())
+  );
+
+CREATE POLICY "Users can update own bills" ON credit_card_bills
+  FOR UPDATE
+  USING      (card_id IN (SELECT id FROM credit_cards WHERE user_id = auth.uid()))
+  WITH CHECK (card_id IN (SELECT id FROM credit_cards WHERE user_id = auth.uid()));
+
+CREATE POLICY "Users can delete own bills" ON credit_card_bills
+  FOR DELETE USING (
+    card_id IN (SELECT id FROM credit_cards WHERE user_id = auth.uid())
+  );
+
+-- ---- credit_card_transactions ----
+CREATE POLICY "Users can view own card transactions" ON credit_card_transactions
+  FOR SELECT USING (
+    deleted_at IS NULL AND (
+      auth.uid() = user_id OR
+      (is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      ))
+    )
+  );
+
+CREATE POLICY "Users can insert own card transactions" ON credit_card_transactions
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own card transactions" ON credit_card_transactions
+  FOR UPDATE USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own card transactions" ON credit_card_transactions
+  FOR DELETE USING (auth.uid() = user_id);
+
+-- Membros do casal podem manipular transações do parceiro no cartão
+-- (necessário para "Dividir com casal" e "Lançar para o parceiro")
+CREATE POLICY "Couple members can view partner card transactions" ON credit_card_transactions
+  FOR SELECT USING (
+    deleted_at IS NULL AND
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active' AND partner_id IS NOT NULL
+    )
+  );
+
+CREATE POLICY "Couple members can insert partner card transactions" ON credit_card_transactions
+  FOR INSERT WITH CHECK (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active' AND partner_id IS NOT NULL
+    )
+  );
+
+CREATE POLICY "Couple members can update partner card transactions" ON credit_card_transactions
+  FOR UPDATE USING (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active' AND partner_id IS NOT NULL
+    )
+  );
+
+CREATE POLICY "Couple members can delete partner card transactions" ON credit_card_transactions
+  FOR DELETE USING (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active' AND partner_id IS NOT NULL
+    )
+  );
+
+
+-- =============================================================================
+-- 7. FUNÇÕES SECURITY DEFINER (RPCs)
+-- =============================================================================
+-- SECURITY DEFINER ignora RLS do caller mas faz checagem manual de autorização
+-- antes de executar — usado quando UPDATE + SELECT na mesma row tem conflito
+-- com a política, ou quando a operação precisa recalcular agregados.
+
+-- ---- Soft-delete da própria transação ----
+CREATE OR REPLACE FUNCTION soft_delete_transaction(transaction_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE transactions
+  SET deleted_at = NOW(), updated_at = NOW()
+  WHERE id          = transaction_id
+    AND user_id     = auth.uid()
+    AND deleted_at  IS NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION soft_delete_transaction(UUID) TO authenticated;
+
+-- ---- Soft-delete da transação do parceiro ----
+CREATE OR REPLACE FUNCTION soft_delete_partner_transaction(transaction_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_partner_id UUID;
+BEGIN
+  SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+  INTO v_partner_id
+  FROM couples
+  WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+    AND status = 'active'
+    AND partner_id IS NOT NULL
+  LIMIT 1;
+
+  IF v_partner_id IS NULL THEN
+    RAISE EXCEPTION 'No active couple found';
+  END IF;
+
+  UPDATE transactions
+  SET deleted_at = NOW(), updated_at = NOW()
+  WHERE id        = transaction_id
+    AND user_id   = v_partner_id
+    AND deleted_at IS NULL;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION soft_delete_partner_transaction(UUID) TO authenticated;
+
+-- ---- Soft-delete de uma única transação de cartão + recalcula total ----
+CREATE OR REPLACE FUNCTION soft_delete_card_transaction(p_transaction_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_owner_id UUID;
+  v_bill_id  UUID;
+  v_total    DECIMAL(15,2);
+BEGIN
+  SELECT user_id, bill_id INTO v_owner_id, v_bill_id
+  FROM credit_card_transactions
+  WHERE id = p_transaction_id AND deleted_at IS NULL;
+
+  IF v_owner_id IS NULL THEN
+    RAISE EXCEPTION 'Transaction not found';
+  END IF;
+
+  -- Autoriza se for o dono OU se for membro de um casal ativo com o dono
+  IF v_owner_id <> auth.uid() THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM couples
+      WHERE status = 'active'
+        AND (
+          (owner_id = auth.uid() AND partner_id = v_owner_id) OR
+          (partner_id = auth.uid() AND owner_id = v_owner_id)
+        )
+    ) THEN
+      RAISE EXCEPTION 'Not authorized';
+    END IF;
+  END IF;
+
+  UPDATE credit_card_transactions
+  SET deleted_at = NOW(), updated_at = NOW()
+  WHERE id = p_transaction_id;
+
+  -- Recalcula total da fatura afetada
+  SELECT COALESCE(SUM(amount), 0) INTO v_total
+  FROM credit_card_transactions
+  WHERE bill_id = v_bill_id AND deleted_at IS NULL;
+
+  UPDATE credit_card_bills
+  SET total_amount = v_total, updated_at = NOW()
+  WHERE id = v_bill_id;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION soft_delete_card_transaction(UUID) TO authenticated;
+
+-- ---- Soft-delete de todas as parcelas de um grupo + recalcula faturas ----
+CREATE OR REPLACE FUNCTION soft_delete_card_installment_group(p_group_id UUID)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_owner_id UUID;
+  v_bill_id  UUID;
+  v_total    DECIMAL(15,2);
+BEGIN
+  SELECT user_id INTO v_owner_id
+  FROM credit_card_transactions
+  WHERE installment_group_id = p_group_id AND deleted_at IS NULL
+  LIMIT 1;
+
+  IF v_owner_id IS NULL THEN
+    RAISE EXCEPTION 'Installment group not found';
+  END IF;
+
+  IF v_owner_id <> auth.uid() THEN
+    IF NOT EXISTS (
+      SELECT 1 FROM couples
+      WHERE status = 'active'
+        AND (
+          (owner_id = auth.uid() AND partner_id = v_owner_id) OR
+          (partner_id = auth.uid() AND owner_id = v_owner_id)
+        )
+    ) THEN
+      RAISE EXCEPTION 'Not authorized';
+    END IF;
+  END IF;
+
+  UPDATE credit_card_transactions
+  SET deleted_at = NOW(), updated_at = NOW()
+  WHERE installment_group_id = p_group_id AND deleted_at IS NULL;
+
+  -- Recalcula total de cada fatura tocada pelo grupo
+  FOR v_bill_id IN (
+    SELECT DISTINCT bill_id
+    FROM credit_card_transactions
+    WHERE installment_group_id = p_group_id
+  ) LOOP
+    SELECT COALESCE(SUM(amount), 0) INTO v_total
+    FROM credit_card_transactions
+    WHERE bill_id = v_bill_id AND deleted_at IS NULL;
+
+    UPDATE credit_card_bills
+    SET total_amount = v_total, updated_at = NOW()
+    WHERE id = v_bill_id;
+  END LOOP;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION soft_delete_card_installment_group(UUID) TO authenticated;
+
+
+-- =============================================================================
+-- 8. GRANTS — permissões para roles do Supabase
+-- =============================================================================
+-- Garante que authenticated e anon possam acessar o schema public
+-- (necessário para SDK do Supabase rodar com a anon/JWT key).
+GRANT USAGE ON SCHEMA public TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA public TO postgres, service_role;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO authenticated;
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
+
+
+-- =============================================================================
+-- 9. SEED — categorias padrão
+-- =============================================================================
+INSERT INTO categories (id, user_id, name, type, color, icon, is_default) VALUES
+  -- Receitas
+  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#22c55e', 'briefcase',       TRUE),
+  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#10b981', 'laptop',          TRUE),
+  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#6366f1', 'trending-up',     TRUE),
+  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#8b5cf6', 'plus-circle',     TRUE),
+
+  -- Despesas
+  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#ef4444', 'home',            TRUE),
+  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#f97316', 'utensils',        TRUE),
+  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#eab308', 'car',             TRUE),
+  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#06b6d4', 'heart-pulse',     TRUE),
+  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#3b82f6', 'graduation-cap',  TRUE),
+  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#ec4899', 'gamepad-2',       TRUE),
+  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#a855f7', 'shirt',           TRUE),
+  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#f472b6', 'gift',            TRUE),
+  (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', 'paw-print',       TRUE),
+  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#64748b', 'repeat',          TRUE),
+  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#f43f5e', 'credit-card',     TRUE),
+  (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', 'more-horizontal', TRUE),
+
+  -- Investimentos
+  (uuid_generate_v4(), NULL, 'Renda Fixa',          'investment', '#6366f1', 'shield',          TRUE),
+  (uuid_generate_v4(), NULL, 'Renda Variável',      'investment', '#8b5cf6', 'trending-up',     TRUE),
+  (uuid_generate_v4(), NULL, 'Fundos Imobiliários', 'investment', '#7c3aed', 'building-2',      TRUE),
+  (uuid_generate_v4(), NULL, 'Criptomoedas',        'investment', '#a78bfa', 'bitcoin',         TRUE);
+
+
+-- =============================================================================
+-- Pronto.
+-- Próximos passos:
+--   1. Em Auth → URL Configuration, adicione: <APP_URL>/auth/callback
+--   2. Em .env.local da app, preencha NEXT_PUBLIC_SUPABASE_URL e _ANON_KEY
+--   3. npm run dev → http://localhost:3000
+-- =============================================================================
