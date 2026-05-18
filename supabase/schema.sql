@@ -427,6 +427,21 @@ CREATE POLICY "Users can view own profile" ON profiles
 CREATE POLICY "Users can update own profile" ON profiles
   FOR UPDATE USING (auth.uid() = id);
 
+-- Permite que cada membro de um casal ativo enxergue o perfil do parceiro.
+-- Sem esta policy, o embed `partner:partner_id(...)` em queries de couples
+-- retorna NULL silenciosamente (RLS oculta a row), e o nome/avatar do
+-- parceiro nunca aparece na UI.
+CREATE POLICY "Couple members can view partner profile" ON profiles
+  FOR SELECT USING (
+    id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active'
+        AND partner_id IS NOT NULL
+    )
+  );
+
 -- ---- couples ----
 CREATE POLICY "Couple members can view couple" ON couples
   FOR SELECT USING (auth.uid() = owner_id OR auth.uid() = partner_id);
