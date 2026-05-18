@@ -1,8 +1,8 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
@@ -12,9 +12,8 @@ import { MonthSelector } from "@/components/shared/month-selector";
 import { ArrowUpRight, ArrowDownRight } from "lucide-react";
 
 export default function CalendarPage() {
-  const { user, couple } = useAuthStore();
-  const { viewMode, selectedMonth } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { selectedMonth } = useUIStore();
 
   const lastDayOfMonth = (() => {
     const [year, m] = selectedMonth.split("-").map(Number);
@@ -22,7 +21,7 @@ export default function CalendarPage() {
   })();
 
   const { data: result, isLoading } = useQuery({
-    queryKey: ["transactions-calendar", user?.id, couple?.id, selectedMonth, isShared],
+    queryKey: ["transactions-calendar", scopeKey, selectedMonth],
     queryFn: () =>
       transactionsService.getTransactions(
         user!.id,

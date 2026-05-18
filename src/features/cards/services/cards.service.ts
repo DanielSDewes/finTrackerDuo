@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { applyScopeFilter } from "@/lib/supabase/filters";
 import type { CreditCard, CreditCardBill, CreditCardTransaction } from "../types";
 import type { CreditCardInput, CardTransactionInput } from "../schemas/card.schema";
 
@@ -17,11 +18,7 @@ export const cardsService = {
       .eq("is_active", true)
       .order("created_at");
 
-    if (isShared && coupleId) {
-      query = query.or(`user_id.eq.${userId},and(is_shared.eq.true,couple_id.eq.${coupleId})`);
-    } else {
-      query = query.eq("user_id", userId);
-    }
+    query = applyScopeFilter(query, { userId, coupleId, isShared });
 
     const { data, error } = await query;
     if (error) throw error;

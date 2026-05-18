@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { applyScopeFilter } from "@/lib/supabase/filters";
 import type { Investment, AssetClass } from "@/types";
 
 export const investmentsService = {
@@ -10,11 +11,7 @@ export const investmentsService = {
       .eq("is_active", true)
       .order("current_value", { ascending: false });
 
-    if (isShared && coupleId) {
-      query = query.or(`user_id.eq.${userId},and(is_shared.eq.true,couple_id.eq.${coupleId})`);
-    } else {
-      query = query.eq("user_id", userId);
-    }
+    query = applyScopeFilter(query, { userId, coupleId, isShared });
 
     const { data, error } = await query;
     if (error) throw error;

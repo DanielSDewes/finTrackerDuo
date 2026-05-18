@@ -1,25 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, MoreVertical, ReceiptText, Layers, Clock } from "lucide-react";
-import { toast } from "sonner";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePartner } from "@/hooks/use-partner";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { CardTransactionForm } from "./transaction-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
+import { EmptyState } from "@/components/shared/empty-state";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { BILL_STATUS_META } from "../types";
 import type { CreditCardTransaction } from "../types";
 import { CategoryIcon } from "@/components/shared/category-icon";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
@@ -28,14 +30,10 @@ type DeleteTarget =
   | { type: "group"; groupId: string; title: string };
 
 export function BillDetail() {
-  const { selectedCardId, selectedBillId, selectedBillMonth, selectedBillYear, setSelectedBill } = useCardsStore();
+  const { selectedCardId, selectedBillId, selectedBillMonth, selectedBillYear } = useCardsStore();
   const { user, couple } = useAuthStore();
+  const { partnerFirstName } = usePartner();
   const queryClient = useQueryClient();
-
-  const partner = couple?.status === "active"
-    ? (couple.owner_id === user?.id ? couple.partner : couple.owner) as { name?: string } | undefined
-    : undefined;
-  const partnerFirstName = partner?.name?.split(" ")[0] ?? "Parceiro(a)";
 
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
@@ -49,63 +47,52 @@ export function BillDetail() {
     enabled: !!selectedBillId,
   });
 
-  const deleteSingleMutation = useMutation({
+  const billInvalidates = [
+    ["card-transactions", selectedBillId],
+    ["bills", selectedCardId],
+    ["cards"],
+  ];
+
+  const deleteSingleMutation = useToastMutation({
     mutationFn: ({ id, billId }: { id: string; billId: string }) =>
       cardsService.deleteTransaction(id, billId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
-      queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
-      toast.success("Transação removida");
-      setDeleteTarget(null);
-    },
-    onError: () => toast.error("Erro ao remover transação"),
+    invalidateKeys: billInvalidates,
+    successMessage: "Transação removida",
+    errorMessage: "Erro ao remover transação",
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const deleteGroupMutation = useMutation({
+  const deleteGroupMutation = useToastMutation({
     mutationFn: (groupId: string) => cardsService.deleteInstallmentGroup(groupId),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
-      queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
-      toast.success("Parcelamento removido");
-      setDeleteTarget(null);
-    },
-    onError: () => toast.error("Erro ao remover parcelamento"),
+    invalidateKeys: billInvalidates,
+    successMessage: "Parcelamento removido",
+    errorMessage: "Erro ao remover parcelamento",
+    onSuccess: () => setDeleteTarget(null),
   });
 
-  const toggleForecastMutation = useMutation({
+  const toggleForecastMutation = useToastMutation({
     mutationFn: ({ id, isForecast }: { id: string; isForecast: boolean }) =>
       cardsService.updateTransactionForecast(id, isForecast),
-    onSuccess: (_, { isForecast }) => {
-      queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
-      toast.success(isForecast ? "Marcado como previsão" : "Previsão removida");
-    },
-    onError: () => toast.error("Erro ao atualizar lançamento"),
+    invalidateKeys: [["card-transactions", selectedBillId]],
+    errorMessage: "Erro ao atualizar lançamento",
   });
 
-  const updateStatusMutation = useMutation({
+  const updateStatusMutation = useToastMutation({
     mutationFn: ({ billId, status }: { billId: string; status: "open" | "closed" | "paid" | "overdue" }) =>
       cardsService.updateBillStatus(billId, status),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
-      toast.success("Status atualizado");
-    },
-    onError: () => toast.error("Erro ao atualizar status"),
+    invalidateKeys: [["bills", selectedCardId], ["cards"]],
+    successMessage: "Status atualizado",
+    errorMessage: "Erro ao atualizar status",
   });
 
   if (!hasBillContext) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8 text-center">
-        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-          <ReceiptText className="w-6 h-6 text-muted-foreground" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">Selecione uma fatura</p>
-          <p className="text-xs text-muted-foreground mt-1">Escolha um mês para ver os lançamentos</p>
-        </div>
-      </div>
+      <EmptyState
+        variant="full"
+        icon={ReceiptText}
+        title="Selecione uma fatura"
+        description="Escolha um mês para ver os lançamentos"
+      />
     );
   }
 
@@ -118,7 +105,6 @@ export function BillDetail() {
     ? transactions.filter((t) => t.user_id === user.id).reduce((s, t) => s + t.amount, 0)
     : total;
   const hasCouple = couple?.status === "active";
-  const billFromData = selectedBillId ? { id: selectedBillId } : null;
 
   // Find current bill status from transactions context — we'll read it from the bills query cache
   const billsData = queryClient.getQueryData<{ id: string; status: string }[]>(["bills", selectedCardId]);
@@ -137,13 +123,12 @@ export function BillDetail() {
             <p className="text-xs text-muted-foreground">
               {transactions.length} lançamento{transactions.length !== 1 ? "s" : ""} •{" "}
               <span className="font-semibold text-foreground">
-                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}
+                {formatCurrency(total)}
               </span>
               {hasCouple && myTotal !== total && (
                 <> •{" "}
                   <span className="font-semibold text-primary">
-                    sua parte{" "}
-                    {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(myTotal)}
+                    sua parte {formatCurrency(myTotal)}
                   </span>
                 </>
               )}
@@ -247,40 +232,28 @@ export function BillDetail() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete confirmation */}
-      <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>
-              {deleteTarget?.type === "group" ? "Remover parcelamento" : "Remover lançamento"}
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              {deleteTarget?.type === "group"
-                ? `Todas as parcelas de "${deleteTarget.title}" serão removidas de todas as faturas.`
-                : `O lançamento "${(deleteTarget as any)?.tx?.title}" será removido desta fatura.`}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive hover:bg-destructive/90"
-              onClick={() => {
-                if (!deleteTarget) return;
-                if (deleteTarget.type === "group") {
-                  deleteGroupMutation.mutate(deleteTarget.groupId);
-                } else {
-                  deleteSingleMutation.mutate({
-                    id: deleteTarget.tx.id,
-                    billId: deleteTarget.tx.bill_id,
-                  });
-                }
-              }}
-            >
-              Remover
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <ConfirmDeleteDialog
+        open={!!deleteTarget}
+        onOpenChange={(o) => !o && setDeleteTarget(null)}
+        title={deleteTarget?.type === "group" ? "Remover parcelamento" : "Remover lançamento"}
+        isPending={deleteGroupMutation.isPending || deleteSingleMutation.isPending}
+        description={
+          deleteTarget?.type === "group"
+            ? `Todas as parcelas de "${deleteTarget.title}" serão removidas de todas as faturas.`
+            : `O lançamento "${deleteTarget?.tx?.title}" será removido desta fatura.`
+        }
+        onConfirm={() => {
+          if (!deleteTarget) return;
+          if (deleteTarget.type === "group") {
+            deleteGroupMutation.mutate(deleteTarget.groupId);
+          } else {
+            deleteSingleMutation.mutate({
+              id: deleteTarget.tx.id,
+              billId: deleteTarget.tx.bill_id,
+            });
+          }
+        }}
+      />
     </div>
   );
 }
@@ -369,48 +342,39 @@ function TransactionRow({
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          {new Date(tx.date + "T00:00:00").toLocaleDateString("pt-BR")}
+          {formatDate(tx.date)}
           {tx.category && ` · ${tx.category.name}`}
         </p>
       </div>
 
-      {/* Amount */}
       <p className="text-sm font-semibold tabular-nums shrink-0">
-        {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(tx.amount)}
+        {formatCurrency(tx.amount)}
       </p>
 
-      {/* Actions */}
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" size="icon-sm" className="h-7 w-7 shrink-0">
-            <MoreVertical className="w-3.5 h-3.5" />
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={() => onToggleForecast(tx.id, !tx.is_forecast)}>
-            <Clock className="w-4 h-4 mr-2 text-orange-400" />
-            {tx.is_forecast ? "Remover previsão" : "Marcar como previsão"}
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:text-destructive"
-            onClick={() => onDelete({ type: "single", tx })}
-          >
-            <Trash2 className="w-4 h-4 mr-2" />
-            Remover esta parcela
-          </DropdownMenuItem>
-          {tx.is_installment && tx.installment_group_id && (
-            <DropdownMenuItem
-              className="text-destructive focus:text-destructive"
-              onClick={() =>
-                onDelete({ type: "group", groupId: tx.installment_group_id!, title: tx.title })
-              }
-            >
-              <Layers className="w-4 h-4 mr-2" />
-              Remover todas as parcelas
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <RowActionsMenu
+        actions={[
+          {
+            label: tx.is_forecast ? "Remover previsão" : "Marcar como previsão",
+            icon: Clock,
+            onClick: () => onToggleForecast(tx.id, !tx.is_forecast),
+          },
+          {
+            label: "Remover esta parcela",
+            icon: Trash2,
+            destructive: true,
+            onClick: () => onDelete({ type: "single", tx }),
+          },
+          ...(tx.is_installment && tx.installment_group_id
+            ? [{
+                label: "Remover todas as parcelas",
+                icon: Layers,
+                destructive: true,
+                onClick: () =>
+                  onDelete({ type: "group", groupId: tx.installment_group_id!, title: tx.title }),
+              }]
+            : []),
+        ]}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth.store";
 import { coupleService } from "@/services/couple.service";
+import { createClient } from "@/lib/supabase/client";
 import { formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
@@ -107,10 +108,27 @@ export function CoupleView() {
     onError: () => toast.error("Erro ao encerrar vínculo"),
   });
 
-  const partner = coupleData?.owner_id === user?.id
-    ? coupleData?.partner
-    : coupleData?.owner;
   const isOwner = coupleData?.owner_id === user?.id;
+  const embeddedPartner = isOwner ? coupleData?.partner : coupleData?.owner;
+  const partnerProfileId = isOwner ? coupleData?.partner_id : coupleData?.owner_id;
+
+  // Fallback: when the FK join doesn't return the partner profile, fetch it directly
+  const { data: fetchedPartner } = useQuery({
+    queryKey: ["partner-profile", partnerProfileId],
+    queryFn: async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("profiles")
+        .select("id,name,email,avatar_url")
+        .eq("id", partnerProfileId!)
+        .maybeSingle();
+      return data as { id: string; name: string; email: string; avatar_url: string | null } | null;
+    },
+    enabled: !!partnerProfileId && !embeddedPartner?.name,
+  });
+
+  const partner = embeddedPartner?.name ? embeddedPartner : (fetchedPartner ?? embeddedPartner);
+  const partnerName = (partner as { name?: string } | undefined)?.name;
 
   // Token a exibir: prioritiza o gerado nesta sessão, depois o do banco
   const displayToken =
@@ -150,10 +168,10 @@ export function CoupleView() {
                       <Avatar className="w-16 h-16 mx-auto mb-2">
                         <AvatarImage src={(partner as any)?.avatar_url ?? undefined} />
                         <AvatarFallback className="text-lg">
-                          {(partner as any)?.name ? getInitials((partner as any).name) : "P"}
+                          {partnerName ? getInitials(partnerName) : "?"}
                         </AvatarFallback>
                       </Avatar>
-                      <p className="text-sm font-medium">{(partner as any)?.name}</p>
+                      <p className="text-sm font-medium">{partnerName ?? "Parceiro(a)"}</p>
                       <p className="text-xs text-muted-foreground">Parceiro(a)</p>
                     </div>
                   </div>

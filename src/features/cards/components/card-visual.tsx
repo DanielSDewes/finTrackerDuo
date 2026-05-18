@@ -1,6 +1,6 @@
 "use client";
 
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { CreditCard, CardBrand } from "../types";
 import { BRAND_META } from "../types";
 
@@ -93,7 +93,7 @@ export function CardVisual({ card, size = "md", selected, onClick }: CardVisualP
           <div className="flex items-center justify-between">
             <p className={cn(sz.font, "text-white/70 font-mono tracking-widest")}>**** **** ****</p>
             <p className={cn(sz.font, "text-white/80 font-medium")}>
-              {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(card.limit_amount)}
+              {formatCurrency(card.limit_amount, { maximumFractionDigits: 0, minimumFractionDigits: 0 })}
             </p>
           </div>
         )}

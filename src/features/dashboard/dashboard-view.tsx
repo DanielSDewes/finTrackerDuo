@@ -5,8 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, CreditCard,
 } from "lucide-react";
-import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { cardsService } from "@/features/cards/services/cards.service";
 import { formatCurrency, formatDate, calculateChange } from "@/lib/utils";
@@ -20,9 +20,8 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function DashboardView() {
-  const { user, couple } = useAuthStore();
-  const { viewMode, selectedMonth } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { selectedMonth } = useUIStore();
 
   // Parse mês selecionado em números
   const [selectedYear, selectedMonthNum] = selectedMonth.split("-").map(Number);
@@ -40,7 +39,7 @@ export function DashboardView() {
 
   // Totais de transações do mês atual
   const { data: currentStats, isLoading } = useQuery({
-    queryKey: ["monthly-stats", user?.id, couple?.id, selectedMonth, isShared],
+    queryKey: ["monthly-stats", scopeKey, selectedMonth],
     queryFn: () =>
       transactionsService.getMonthlyStats(user!.id, couple?.id ?? null, selectedMonth, isShared),
     enabled: !!user,
@@ -48,7 +47,7 @@ export function DashboardView() {
 
   // Totais de transações do mês anterior
   const { data: prevStats } = useQuery({
-    queryKey: ["monthly-stats", user?.id, couple?.id, prevMonth, isShared],
+    queryKey: ["monthly-stats", scopeKey, prevMonth],
     queryFn: () =>
       transactionsService.getMonthlyStats(user!.id, couple?.id ?? null, prevMonth, isShared),
     enabled: !!user,
@@ -56,7 +55,7 @@ export function DashboardView() {
 
   // Faturas de cartão do mês atual
   const { data: cardsSummary = [], isLoading: loadingCards } = useQuery({
-    queryKey: ["cards", "summary", user?.id, couple?.id, selectedMonthNum, selectedYear, isShared],
+    queryKey: ["cards", "summary", scopeKey, selectedMonthNum, selectedYear],
     queryFn: () =>
       cardsService.getCardsSummary(user!.id, couple?.id ?? null, selectedMonthNum, selectedYear, isShared),
     enabled: !!user,
@@ -64,7 +63,7 @@ export function DashboardView() {
 
   // Faturas de cartão do mês anterior
   const { data: prevCardsSummary = [] } = useQuery({
-    queryKey: ["cards", "summary", user?.id, couple?.id, prevMonthNum, prevYear, isShared],
+    queryKey: ["cards", "summary", scopeKey, prevMonthNum, prevYear],
     queryFn: () =>
       cardsService.getCardsSummary(user!.id, couple?.id ?? null, prevMonthNum, prevYear, isShared),
     enabled: !!user,
@@ -72,7 +71,7 @@ export function DashboardView() {
 
   // Lista completa de transações do mês (side-by-side)
   const { data: monthData, isLoading: loadingList } = useQuery({
-    queryKey: ["transactions-month", user?.id, couple?.id, selectedMonth, isShared],
+    queryKey: ["transactions-month", scopeKey, selectedMonth],
     queryFn: () =>
       transactionsService.getTransactions(
         user!.id,

@@ -5,20 +5,17 @@ import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend,
 } from "recharts";
-import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatMonth } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CashFlowChart() {
-  const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["cash-flow", user?.id, couple?.id, isShared],
+    queryKey: ["cash-flow", scopeKey],
     queryFn: () =>
       transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 6, isShared),
     enabled: !!user,

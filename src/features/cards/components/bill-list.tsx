@@ -1,16 +1,15 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { ChevronLeft, ChevronRight, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { EmptyState } from "@/components/shared/empty-state";
 import { BILL_STATUS_META } from "../types";
 import type { CreditCardBill } from "../types";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 const MONTHS_PT = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
@@ -50,15 +49,12 @@ export function BillList() {
 
   if (!selectedCardId) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3 p-8 text-center">
-        <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center">
-          <Receipt className="w-6 h-6 text-muted-foreground" />
-        </div>
-        <div>
-          <p className="text-sm font-medium">Selecione um cartão</p>
-          <p className="text-xs text-muted-foreground mt-1">Escolha um cartão para ver as faturas</p>
-        </div>
-      </div>
+      <EmptyState
+        variant="full"
+        icon={Receipt}
+        title="Selecione um cartão"
+        description="Escolha um cartão para ver as faturas"
+      />
     );
   }
 
@@ -130,11 +126,11 @@ export function BillList() {
                     return (
                       <>
                         <p className="text-sm font-semibold tabular-nums">
-                          {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(userAmt)}
+                          {formatCurrency(userAmt)}
                         </p>
                         {showTotal && (
                           <p className="text-[10px] text-muted-foreground tabular-nums">
-                            total {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(bill.total_amount)}
+                            total {formatCurrency(bill.total_amount)}
                           </p>
                         )}
                       </>

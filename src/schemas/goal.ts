@@ -17,5 +17,18 @@ export const goalContributionSchema = z.object({
   notes: z.string().max(200).optional().nullable(),
 });
 
+export const goalSubgoalSchema = z.object({
+  title: z.string().min(1, "Título obrigatório").max(120),
+  amount: z.coerce.number().nonnegative("Valor inválido").default(0),
+  link: z
+    .string()
+    .max(500)
+    .optional()
+    .nullable()
+    .transform((v) => (v && v.trim() ? v.trim() : null)),
+  notes: z.string().max(500).optional().nullable(),
+});
+
 export type GoalInput = z.output<typeof goalSchema>;
 export type GoalContributionInput = z.output<typeof goalContributionSchema>;
+export type GoalSubgoalInput = z.output<typeof goalSubgoalSchema>;

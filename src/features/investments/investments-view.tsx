@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Plus, TrendingUp, TrendingDown, Wallet, MoreHorizontal, Trash2, Pencil } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Pencil } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
-import { toast } from "sonner";
-import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { investmentsService } from "@/services/investments.service";
 import { formatCurrency, formatPercent, formatNumber, CHART_COLORS } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
@@ -20,9 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { InvestmentForm } from "./investment-form";
 import type { Investment } from "@/types";
 
@@ -35,27 +32,22 @@ const assetClassLabels: Record<string, string> = {
 };
 
 export function InvestmentsView() {
-  const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
-  const queryClient = useQueryClient();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
 
   const { data: summary, isLoading } = useQuery({
-    queryKey: ["investment-summary", user?.id, couple?.id, isShared],
+    queryKey: ["investment-summary", scopeKey],
     queryFn: () => investmentsService.getPortfolioSummary(user!.id, couple?.id, isShared),
     enabled: !!user,
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useToastMutation({
     mutationFn: (id: string) => investmentsService.deleteInvestment(id),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["investment-summary"] });
-      toast.success("Investimento removido");
-    },
-    onError: () => toast.error("Erro ao remover investimento"),
+    invalidateKeys: [["investment-summary"]],
+    successMessage: "Investimento removido",
+    errorMessage: "Erro ao remover investimento",
   });
 
   const pieData = summary
@@ -241,7 +233,6 @@ export function InvestmentsView() {
                   onSuccess={() => {
                     setFormOpen(false);
                     setEditingInvestment(null);
-                    queryClient.invalidateQueries({ queryKey: ["investment-summary"] });
                   }}
                 />
               </DialogContent>
@@ -320,33 +311,25 @@ export function InvestmentsView() {
                                 </p>
                               </div>
 
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon-sm"
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity"
-                                  >
-                                    <MoreHorizontal className="w-4 h-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => {
-                                    setEditingInvestment(investment);
-                                    setFormOpen(true);
-                                  }}>
-                                    <Pencil className="w-4 h-4" />
-                                    Editar
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    destructive
-                                    onClick={() => deleteMutation.mutate(investment.id)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                    Remover
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                              <RowActionsMenu
+                                triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
+                                actions={[
+                                  {
+                                    label: "Editar",
+                                    icon: Pencil,
+                                    onClick: () => {
+                                      setEditingInvestment(investment);
+                                      setFormOpen(true);
+                                    },
+                                  },
+                                  {
+                                    label: "Remover",
+                                    icon: Trash2,
+                                    destructive: true,
+                                    onClick: () => deleteMutation.mutate(investment.id),
+                                  },
+                                ]}
+                              />
                             </div>
                           );
                         })}

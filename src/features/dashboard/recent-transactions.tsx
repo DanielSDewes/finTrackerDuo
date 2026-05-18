@@ -3,8 +3,7 @@
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowUpRight, ArrowDownRight, ArrowRight } from "lucide-react";
-import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,12 +12,10 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function RecentTransactions() {
-  const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
 
   const { data, isLoading } = useQuery({
-    queryKey: ["transactions-recent", user?.id, couple?.id, isShared],
+    queryKey: ["transactions-recent", scopeKey],
     queryFn: () =>
       transactionsService.getTransactions(
         user!.id,

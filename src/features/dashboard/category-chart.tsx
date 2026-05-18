@@ -2,8 +2,8 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
-import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,12 +11,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CategoryChart() {
-  const { user, couple } = useAuthStore();
-  const { viewMode, selectedMonth } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { selectedMonth } = useUIStore();
 
   const { data: expenseData, isLoading } = useQuery({
-    queryKey: ["category-breakdown", user?.id, couple?.id, selectedMonth, "expense", isShared],
+    queryKey: ["category-breakdown", scopeKey, selectedMonth, "expense"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
         user!.id, couple?.id ?? null, selectedMonth, "expense", isShared
@@ -25,7 +24,7 @@ export function CategoryChart() {
   });
 
   const { data: incomeData } = useQuery({
-    queryKey: ["category-breakdown", user?.id, couple?.id, selectedMonth, "income", isShared],
+    queryKey: ["category-breakdown", scopeKey, selectedMonth, "income"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
         user!.id, couple?.id ?? null, selectedMonth, "income", isShared

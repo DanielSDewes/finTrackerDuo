@@ -1,15 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { investmentSchema, type InvestmentInput } from "@/schemas/investment";
 import { investmentsService } from "@/services/investments.service";
 import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,12 +40,10 @@ type InvestmentFormProps = {
 
 export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
   const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
+  const { isShared: scopeShared } = useScopeFilter();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { register, handleSubmit, control, watch, setValue, formState: { errors } } =
-    useForm<InvestmentInput>({
-      resolver: zodResolver(investmentSchema) as any,
+    useZodForm(investmentSchema, {
       defaultValues: {
         asset_class: investment?.asset_class ?? "fixed_income",
         subcategory: investment?.subcategory ?? "",
@@ -59,7 +56,7 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
         invested_amount: investment?.invested_amount ?? 0,
         current_value: investment?.current_value ?? 0,
         dividends_received: investment?.dividends_received ?? 0,
-        is_shared: investment?.is_shared ?? (viewMode === "couple"),
+        is_shared: investment?.is_shared ?? scopeShared,
         purchase_date: investment?.purchase_date ?? "",
         notes: investment?.notes ?? "",
       },
@@ -78,7 +75,7 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
     setValue("current_value", qty * cur);
   }, [quantity, averagePrice, currentPrice, setValue]);
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: async (data: InvestmentInput) => {
       const payload = {
         ...data,
@@ -93,17 +90,17 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
       if (investment?.id) {
         return investmentsService.updateInvestment(investment.id, payload);
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return investmentsService.createInvestment(payload as any);
     },
-    onSuccess: () => {
-      toast.success(investment ? "Investimento atualizado!" : "Investimento adicionado!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao salvar investimento"),
+    invalidateKeys: [["investments"], ["investments-summary"]],
+    successMessage: investment ? "Investimento atualizado!" : "Investimento adicionado!",
+    errorMessage: "Erro ao salvar investimento",
+    onSuccess: () => onSuccess?.(),
   });
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as InvestmentInput))} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label>Classe do Ativo</Label>

@@ -166,6 +166,22 @@ export type GoalContribution = {
   contributed_at: string;
 };
 
+export type GoalSubgoal = {
+  id: string;
+  goal_id: string;
+  user_id: string;
+  couple_id: string | null;
+  title: string;
+  amount: number;
+  link: string | null;
+  notes: string | null;
+  completed: boolean;
+  completed_at: string | null;
+  position: number;
+  created_at: string;
+  updated_at: string;
+};
+
 export type Notification = {
   id: string;
   user_id: string;

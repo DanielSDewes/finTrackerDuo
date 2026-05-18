@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client";
+import { applyScopeFilter } from "@/lib/supabase/filters";
 import type { Transaction, FilterOptions, PaginationOptions, SortOptions } from "@/types";
 
 export const transactionsService = {
@@ -20,11 +21,7 @@ export const transactionsService = {
       .select("*, category:categories(*), account:accounts(*)", { count: "exact" })
       .is("deleted_at", null);
 
-    if (isSharedView && coupleId) {
-      query = query.or(`user_id.eq.${userId},and(is_shared.eq.true,couple_id.eq.${coupleId})`);
-    } else {
-      query = query.eq("user_id", userId);
-    }
+    query = applyScopeFilter(query, { userId, coupleId, isShared: isSharedView });
 
     if (filters.type) query = query.eq("type", filters.type);
     if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
@@ -90,11 +87,7 @@ export const transactionsService = {
       .gte("date", startDate)
       .lte("date", endDate);
 
-    if (isShared && coupleId) {
-      query = query.or(`user_id.eq.${userId},and(is_shared.eq.true,couple_id.eq.${coupleId})`);
-    } else {
-      query = query.eq("user_id", userId);
-    }
+    query = applyScopeFilter(query, { userId, coupleId, isShared });
 
     const { data, error } = await query;
     if (error) throw error;
@@ -140,11 +133,7 @@ export const transactionsService = {
       .gte("date", startDate)
       .lte("date", endDate);
 
-    if (isShared && coupleId) {
-      query = query.or(`user_id.eq.${userId},and(is_shared.eq.true,couple_id.eq.${coupleId})`);
-    } else {
-      query = query.eq("user_id", userId);
-    }
+    query = applyScopeFilter(query, { userId, coupleId, isShared });
 
     const { data, error } = await query;
     if (error) throw error;

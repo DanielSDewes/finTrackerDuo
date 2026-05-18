@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, UserRound } from "lucide-react";
-import { toast } from "sonner";
 import { cardTransactionSchema, type CardTransactionInput } from "../schemas/card.schema";
 import { cardsService } from "../services/cards.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { usePartner } from "@/hooks/use-partner";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { categoriesService } from "@/services/categories.service";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CategoryIcon } from "@/components/shared/category-icon";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 type CardTransactionFormProps = {
   cardId: string;
@@ -28,13 +29,7 @@ type CardTransactionFormProps = {
 
 export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: CardTransactionFormProps) {
   const { user, couple } = useAuthStore();
-
-  const partnerId =
-    couple?.status === "active"
-      ? couple.owner_id === user?.id
-        ? couple.partner_id
-        : couple.owner_id
-      : null;
+  const { partnerId } = usePartner();
 
   // UI-only toggles — not part of the Zod schema
   const [forPartner, setForPartner] = useState(false);
@@ -45,8 +40,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
     control,
     watch,
     formState: { errors },
-  } = useForm<CardTransactionInput>({
-    resolver: zodResolver(cardTransactionSchema) as any,
+  } = useZodForm<typeof cardTransactionSchema, CardTransactionInput>(cardTransactionSchema, {
     defaultValues: {
       title: "",
       description: "",
@@ -71,7 +65,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
     enabled: !!user,
   });
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: async (data: CardTransactionInput) => {
       // "Lançar para o parceiro" — full amount, partner's user_id
       if (forPartner && partnerId && couple?.id) {
@@ -93,11 +87,14 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         data, cardId, billMonth, billYear, user!.id, couple?.id ?? null,
       );
     },
-    onSuccess: () => {
-      toast.success("Lançamento criado!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao criar lançamento"),
+    invalidateKeys: [
+      ["card-transactions"],
+      ["bills"],
+      ["cards"],
+    ],
+    successMessage: "Lançamento criado!",
+    errorMessage: "Erro ao criar lançamento",
+    onSuccess: () => onSuccess?.(),
   });
 
   const perInstallment =
@@ -106,7 +103,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
       : null;
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as CardTransactionInput))} className="space-y-4">
       {/* Title */}
       <div className="space-y-2">
         <Label htmlFor="title">Título</Label>
@@ -134,7 +131,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         {perInstallment && (
           <p className="text-xs text-muted-foreground">
             ≈{" "}
-            {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(perInstallment)}{" "}
+            {formatCurrency(perInstallment)}{" "}
             por parcela
           </p>
         )}

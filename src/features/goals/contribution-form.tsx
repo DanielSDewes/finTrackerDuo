@@ -1,13 +1,11 @@
 "use client";
 
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { goalContributionSchema, type GoalContributionInput } from "@/schemas/goal";
 import { goalsService } from "@/services/goals.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { formatCurrency, calculatePercentage } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,19 +24,15 @@ export function ContributionForm({ goal, onSuccess }: ContributionFormProps) {
   const remaining = goal.target_amount - goal.current_amount;
   const percentage = calculatePercentage(goal.current_amount, goal.target_amount);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { register, handleSubmit, formState: { errors } } = useForm<GoalContributionInput>({
-    resolver: zodResolver(goalContributionSchema) as any,
-  });
+  const { register, handleSubmit, formState: { errors } } = useZodForm(goalContributionSchema);
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: (data: GoalContributionInput) =>
       goalsService.addContribution(goal.id, user!.id, data.amount, data.notes ?? undefined),
-    onSuccess: () => {
-      toast.success("Aporte registrado!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao registrar aporte"),
+    invalidateKeys: [["goals"]],
+    successMessage: "Aporte registrado!",
+    errorMessage: "Erro ao registrar aporte",
+    onSuccess: () => onSuccess?.(),
   });
 
   return (
@@ -59,7 +53,7 @@ export function ContributionForm({ goal, onSuccess }: ContributionFormProps) {
         <Progress value={percentage} className="h-2 mt-2" />
       </div>
 
-      <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+      <form onSubmit={handleSubmit((data) => mutation.mutate(data as GoalContributionInput))} className="space-y-4">
         <div className="space-y-2">
           <Label>Valor do aporte (R$)</Label>
           <Input

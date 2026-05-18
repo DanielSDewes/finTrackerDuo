@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { creditCardSchema, type CreditCardInput } from "../schemas/card.schema";
 import { cardsService } from "../services/cards.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +24,6 @@ type CardFormProps = {
 
 export function CardForm({ card, onSuccess }: CardFormProps) {
   const { user, couple } = useAuthStore();
-  const queryClient = useQueryClient();
 
   const {
     register,
@@ -34,8 +31,7 @@ export function CardForm({ card, onSuccess }: CardFormProps) {
     control,
     watch,
     formState: { errors },
-  } = useForm<CreditCardInput>({
-    resolver: zodResolver(creditCardSchema) as any,
+  } = useZodForm<typeof creditCardSchema, CreditCardInput>(creditCardSchema, {
     defaultValues: {
       name: card?.name ?? "",
       brand: card?.brand ?? "other",
@@ -49,23 +45,21 @@ export function CardForm({ card, onSuccess }: CardFormProps) {
 
   const preview = watch();
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: async (data: CreditCardInput) => {
       if (card?.id) {
         return cardsService.updateCard(card.id, data);
       }
       return cardsService.createCard(data, user!.id, couple?.id ?? null);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cards"] });
-      toast.success(card ? "Cartão atualizado!" : "Cartão criado!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao salvar cartão"),
+    invalidateKeys: [["cards"]],
+    successMessage: card ? "Cartão atualizado!" : "Cartão criado!",
+    errorMessage: "Erro ao salvar cartão",
+    onSuccess: () => onSuccess?.(),
   });
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-5">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as CreditCardInput))} className="space-y-5">
       {/* Preview */}
       <div className="flex justify-center">
         <CardVisual

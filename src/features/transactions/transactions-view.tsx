@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
   Plus, Search, ArrowUpRight, ArrowDownRight,
-  Trash2, Pencil, MoreHorizontal, Calendar, Users,
+  Trash2, Pencil, Calendar, Users,
 } from "lucide-react";
-import { toast } from "sonner";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
+import { usePartner } from "@/hooks/use-partner";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
@@ -22,42 +23,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
-  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
-  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
-} from "@/components/ui/alert-dialog";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
+import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { TransactionForm } from "./transaction-form";
-import type { Transaction, UserProfile } from "@/types";
+import type { Transaction } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
-
-function AlertDialogComponent({
-  open, onOpenChange, onConfirm,
-}: { open: boolean; onOpenChange: (v: boolean) => void; onConfirm: () => void }) {
-  return (
-    <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Excluir transação</AlertDialogTitle>
-          <AlertDialogDescription>
-            Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={onConfirm}
-            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-          >
-            Excluir
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
-}
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -112,27 +82,13 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
           {type === "income" ? "+" : "-"}{formatCurrency(tx.amount)}
         </p>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              className="opacity-0 group-hover:opacity-100 transition-opacity"
-            >
-              <MoreHorizontal className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(tx)}>
-              <Pencil className="w-4 h-4" />
-              Editar
-            </DropdownMenuItem>
-            <DropdownMenuItem destructive onClick={() => onDelete(tx.id)}>
-              <Trash2 className="w-4 h-4" />
-              Excluir
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        <RowActionsMenu
+          triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
+          actions={[
+            { label: "Editar", icon: Pencil, onClick: () => onEdit(tx) },
+            { label: "Excluir", icon: Trash2, destructive: true, onClick: () => onDelete(tx.id) },
+          ]}
+        />
       </div>
     </motion.div>
   );
@@ -141,13 +97,7 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
 export function TransactionsView() {
   const { user, couple } = useAuthStore();
   const { selectedMonth, setSelectedMonth } = useUIStore();
-  const queryClient = useQueryClient();
-
-  // Resolve partner relative to the logged-in user
-  const partner = couple?.status === "active"
-    ? (couple.owner_id === user?.id ? couple.partner : couple.owner) as UserProfile | undefined
-    : undefined;
-  const partnerId = partner?.id;
+  const { partner, partnerId } = usePartner();
 
   const [viewingPartner, setViewingPartner] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -179,16 +129,12 @@ export function TransactionsView() {
     staleTime: 60_000,
   });
 
-  const deleteMutation = useMutation({
+  const deleteMutation = useToastMutation({
     mutationFn: (id: string) => transactionsService.deleteTransaction(id, viewingPartner),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["monthly-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["cash-flow"] });
-      toast.success("Transação excluída");
-      setDeleteId(null);
-    },
-    onError: () => toast.error("Erro ao excluir transação"),
+    invalidateKeys: [["transactions"], ["monthly-stats"], ["cash-flow"]],
+    successMessage: "Transação excluída",
+    errorMessage: "Erro ao excluir transação",
+    onSuccess: () => setDeleteId(null),
   });
 
   const handleEdit = (t: Transaction) => {
@@ -306,7 +252,7 @@ export function TransactionsView() {
               </DialogHeader>
               <TransactionForm
                 transaction={editingTransaction}
-                partnerId={partnerId}
+                partnerId={partnerId ?? undefined}
                 isPartnerForm={viewingPartner}
                 onSuccess={() => {
                   setFormOpen(false);
@@ -481,9 +427,13 @@ export function TransactionsView() {
         </div>
       </div>
 
-      <AlertDialogComponent
+      <ConfirmDeleteDialog
         open={!!deleteId}
         onOpenChange={(open) => !open && setDeleteId(null)}
+        title="Excluir transação"
+        confirmLabel="Excluir"
+        description="Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita."
+        isPending={deleteMutation.isPending}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
       />
     </div>

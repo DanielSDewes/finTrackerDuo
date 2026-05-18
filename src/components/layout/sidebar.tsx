@@ -75,7 +75,7 @@ export function Sidebar() {
         )}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 shrink-0">
-              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={28} height={28} />
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} />
             </div>
             <AnimatePresence>
               {!sidebarCollapsed && (
@@ -85,7 +85,7 @@ export function Sidebar() {
                   exit={{ opacity: 0, width: 0 }}
                   className="font-bold text-base tracking-tight overflow-hidden whitespace-nowrap"
                 >
-                  FinTracker
+                  FinTrackerDuo
                 </motion.span>
               )}
             </AnimatePresence>

@@ -1,14 +1,14 @@
 "use client";
 
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
 import { Loader2 } from "lucide-react";
-import { toast } from "sonner";
 import { goalSchema, type GoalInput } from "@/schemas/goal";
 import { goalsService } from "@/services/goals.service";
 import { useAuthStore } from "@/stores/auth.store";
-import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
+import { GOAL_CATEGORIES } from "./constants";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,16 +17,6 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Goal } from "@/types";
 
-const goalCategories = [
-  { value: "travel", label: "Viagem" },
-  { value: "car", label: "Carro" },
-  { value: "house", label: "Casa/Imóvel" },
-  { value: "emergency", label: "Reserva de Emergência" },
-  { value: "retirement", label: "Aposentadoria" },
-  { value: "education", label: "Educação" },
-  { value: "other", label: "Outro" },
-];
-
 type GoalFormProps = {
   goal?: Goal | null;
   onSuccess?: () => void;
@@ -34,11 +24,9 @@ type GoalFormProps = {
 
 export function GoalForm({ goal, onSuccess }: GoalFormProps) {
   const { user, couple } = useAuthStore();
-  const { viewMode } = useUIStore();
+  const { isShared: scopeShared } = useScopeFilter();
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { register, handleSubmit, control, formState: { errors } } = useForm<GoalInput>({
-    resolver: zodResolver(goalSchema) as any,
+  const { register, handleSubmit, control, formState: { errors } } = useZodForm(goalSchema, {
     defaultValues: {
       title: goal?.title ?? "",
       description: goal?.description ?? "",
@@ -47,11 +35,11 @@ export function GoalForm({ goal, onSuccess }: GoalFormProps) {
       current_amount: goal?.current_amount ?? 0,
       deadline: goal?.deadline ?? "",
       color: goal?.color ?? "#6366f1",
-      is_shared: goal?.is_shared ?? (viewMode === "couple"),
+      is_shared: goal?.is_shared ?? scopeShared,
     },
   });
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: async (data: GoalInput) => {
       const payload = {
         ...data,
@@ -64,17 +52,17 @@ export function GoalForm({ goal, onSuccess }: GoalFormProps) {
       };
 
       if (goal?.id) return goalsService.updateGoal(goal.id, payload);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return goalsService.createGoal(payload as any);
     },
-    onSuccess: () => {
-      toast.success(goal ? "Meta atualizada!" : "Meta criada!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao salvar meta"),
+    invalidateKeys: [["goals"]],
+    successMessage: goal ? "Meta atualizada!" : "Meta criada!",
+    errorMessage: "Erro ao salvar meta",
+    onSuccess: () => onSuccess?.(),
   });
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as GoalInput))} className="space-y-4">
       <div className="space-y-2">
         <Label>Título</Label>
         <Input placeholder="Ex: Viagem para Europa" error={!!errors.title} {...register("title")} />
@@ -92,8 +80,13 @@ export function GoalForm({ goal, onSuccess }: GoalFormProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {goalCategories.map((c) => (
-                  <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>
+                {GOAL_CATEGORIES.map((c) => (
+                  <SelectItem key={c.value} value={c.value}>
+                    <span className="inline-flex items-center gap-2">
+                      <span aria-hidden>{c.icon}</span>
+                      {c.label}
+                    </span>
+                  </SelectItem>
                 ))}
               </SelectContent>
             </Select>

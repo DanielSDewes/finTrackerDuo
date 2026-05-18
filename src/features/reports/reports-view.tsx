@@ -5,8 +5,8 @@ import {
   BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Legend, Cell,
 } from "recharts";
-import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { investmentsService } from "@/services/investments.service";
 import { formatCurrency, formatMonth, CHART_COLORS } from "@/lib/utils";
@@ -17,19 +17,18 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { MonthSelector } from "@/components/shared/month-selector";
 
 export function ReportsView() {
-  const { user, couple } = useAuthStore();
-  const { viewMode, selectedMonth } = useUIStore();
-  const isShared = viewMode === "couple" && !!couple;
+  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { selectedMonth } = useUIStore();
 
   const { data: cashFlow, isLoading: cfLoading } = useQuery({
-    queryKey: ["cash-flow", user?.id, couple?.id, isShared, 12],
+    queryKey: ["cash-flow", scopeKey, 12],
     queryFn: () =>
       transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
   const { data: expenseBreakdown, isLoading: ebLoading } = useQuery({
-    queryKey: ["category-breakdown-report", user?.id, couple?.id, selectedMonth, "expense", isShared],
+    queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "expense"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
         user!.id, couple?.id ?? null, selectedMonth, "expense", isShared
@@ -38,7 +37,7 @@ export function ReportsView() {
   });
 
   const { data: incomeBreakdown, isLoading: ibLoading } = useQuery({
-    queryKey: ["category-breakdown-report", user?.id, couple?.id, selectedMonth, "income", isShared],
+    queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "income"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
         user!.id, couple?.id ?? null, selectedMonth, "income", isShared
@@ -47,7 +46,7 @@ export function ReportsView() {
   });
 
   const { data: investmentSummary } = useQuery({
-    queryKey: ["investment-summary", user?.id, couple?.id, isShared],
+    queryKey: ["investment-summary", scopeKey],
     queryFn: () => investmentsService.getPortfolioSummary(user!.id, couple?.id, isShared),
     enabled: !!user,
   });

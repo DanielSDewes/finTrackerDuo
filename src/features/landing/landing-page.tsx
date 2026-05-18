@@ -115,8 +115,8 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center gap-2">
-              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={32} height={32} />
-              <span className="font-bold text-xl tracking-tight">finTrackerDuo</span>
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={32} height={32} />
+              <span className="font-bold text-xl tracking-tight">FinTrackerDuo</span>
             </div>
 
             <nav className="hidden md:flex items-center gap-6">
@@ -228,7 +228,7 @@ export function LandingPage() {
               </div>
               <div className="flex-1 mx-4">
                 <div className="bg-background rounded-md px-3 py-1 text-xs text-muted-foreground text-center">
-                  fintracker.app/dashboard
+                  fintrackerduo.app/dashboard
                 </div>
               </div>
             </div>
@@ -497,7 +497,7 @@ export function LandingPage() {
               Pronto para organizar suas finanças?
             </h2>
             <p className="text-muted-foreground text-lg mb-8">
-              Junte-se a milhares de pessoas que já controlam melhor seu dinheiro com o finTrackerDuo.
+              Junte-se a milhares de pessoas que já controlam melhor seu dinheiro com o FinTrackerDuo.
             </p>
             <Link href="/auth/register">
               <Button size="xl">
@@ -514,11 +514,11 @@ export function LandingPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row items-center justify-between gap-4">
             <div className="flex items-center gap-2">
-              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={24} height={24} />
-              <span className="font-semibold text-sm">finTrackerDuo</span>
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={24} height={24} />
+              <span className="font-semibold text-sm">FinTrackerDuo</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              2025 finTrackerDuo. Todos os direitos reservados.
+              2025 FinTrackerDuo. Todos os direitos reservados.
             </p>
             <div className="flex gap-4 text-xs text-muted-foreground">
               <a href="#" className="hover:text-foreground transition-colors">Privacidade</a>

@@ -22,8 +22,8 @@ const appUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: "FinTracker — Controle Financeiro para Casais",
-    template: "%s | FinTracker",
+    default: "FinTrackerDuo — Controle Financeiro para Casais",
+    template: "%s | FinTrackerDuo",
   },
   description:
     "Plataforma moderna de controle financeiro pessoal e compartilhado para casais. Gerencie entradas, saídas, investimentos e metas financeiras.",
@@ -35,8 +35,8 @@ export const metadata: Metadata = {
     "metas financeiras",
     "dashboard financeiro",
   ],
-  authors: [{ name: "FinTracker" }],
-  creator: "FinTracker",
+  authors: [{ name: "FinTrackerDuo" }],
+  creator: "FinTrackerDuo",
   icons: {
     icon: "/finTrackerDuo_logo.svg",
     shortcut: "/finTrackerDuo_logo.svg",
@@ -45,19 +45,19 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    title: "FinTracker — Controle Financeiro para Casais",
+    title: "FinTrackerDuo — Controle Financeiro para Casais",
     description: "Organize suas finanças pessoais e do casal em uma plataforma moderna.",
-    siteName: "FinTracker",
+    siteName: "FinTrackerDuo",
     images: [
       {
         url: "/iconeSite.png",
-        alt: "finTrackerDuo — Controle Financeiro para Casais",
+        alt: "FinTrackerDuo — Controle Financeiro para Casais",
       },
     ],
   },
   twitter: {
     card: "summary_large_image",
-    title: "FinTracker",
+    title: "FinTrackerDuo",
     description: "Controle financeiro inteligente para casais",
     images: ["/iconeSite.png"],
   },

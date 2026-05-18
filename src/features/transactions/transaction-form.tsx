@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Controller } from "react-hook-form";
+import { useQuery } from "@tanstack/react-query";
 import { Loader2, UserRound } from "lucide-react";
-import { toast } from "sonner";
 import { transactionSchema, type TransactionInput } from "@/schemas/transaction";
 import { transactionsService } from "@/services/transactions.service";
 import { categoriesService } from "@/services/categories.service";
 import { useAuthStore } from "@/stores/auth.store";
+import { useZodForm } from "@/hooks/use-zod-form";
+import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -30,7 +30,6 @@ type TransactionFormProps = {
 
 export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerForm = false }: TransactionFormProps) {
   const { user, couple } = useAuthStore();
-  const queryClient = useQueryClient();
 
   // UI-only state: whether to create this transaction for the partner
   const [forPartner, setForPartner] = useState(isPartnerForm);
@@ -43,9 +42,7 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
     control,
     watch,
     formState: { errors },
-  } = useForm<TransactionInput>({
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    resolver: zodResolver(transactionSchema) as any,
+  } = useZodForm<typeof transactionSchema, TransactionInput>(transactionSchema, {
     defaultValues: {
       type: (transaction?.type === "income" ? "income" : "expense") as "income" | "expense",
       amount: transaction?.amount ?? undefined,
@@ -65,11 +62,12 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
 
   const { data: categories } = useQuery({
     queryKey: ["categories", user?.id, currentType],
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     queryFn: () => categoriesService.getCategories(user!.id, currentType as any, couple?.id),
     enabled: !!user,
   });
 
-  const mutation = useMutation({
+  const mutation = useToastMutation({
     mutationFn: async (data: TransactionInput) => {
       const payload = {
         ...data,
@@ -83,22 +81,23 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
       if (transaction?.id) {
         return transactionsService.updateTransaction(transaction.id, payload);
       }
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return transactionsService.createTransaction(payload as any);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["transactions"] });
-      queryClient.invalidateQueries({ queryKey: ["monthly-stats"] });
-      queryClient.invalidateQueries({ queryKey: ["cash-flow"] });
-      queryClient.invalidateQueries({ queryKey: ["category-breakdown"] });
-      queryClient.invalidateQueries({ queryKey: ["total-balance"] });
-      toast.success(transaction ? "Transação atualizada!" : "Transação criada!");
-      onSuccess?.();
-    },
-    onError: () => toast.error("Erro ao salvar transação"),
+    invalidateKeys: [
+      ["transactions"],
+      ["monthly-stats"],
+      ["cash-flow"],
+      ["category-breakdown"],
+      ["total-balance"],
+    ],
+    successMessage: transaction ? "Transação atualizada!" : "Transação criada!",
+    errorMessage: "Erro ao salvar transação",
+    onSuccess: () => onSuccess?.(),
   });
 
   return (
-    <form onSubmit={handleSubmit((data) => mutation.mutate(data as TransactionInput))} className="space-y-4">
+    <form onSubmit={handleSubmit((data) => mutation.mutate(data as unknown as TransactionInput))} className="space-y-4">
       {/* Type */}
       <div className="space-y-2">
         <Label>Tipo</Label>

@@ -7,16 +7,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export function formatCurrency(
-  value: number,
-  currency = "BRL",
-  locale = "pt-BR"
-): string {
+export type FormatCurrencyOptions = {
+  currency?: string;
+  locale?: string;
+  minimumFractionDigits?: number;
+  maximumFractionDigits?: number;
+};
+
+export function formatCurrency(value: number, options: FormatCurrencyOptions = {}): string {
+  const {
+    currency = "BRL",
+    locale = "pt-BR",
+    minimumFractionDigits = 2,
+    maximumFractionDigits = 2,
+  } = options;
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
+    minimumFractionDigits,
+    maximumFractionDigits,
   }).format(value);
 }
 

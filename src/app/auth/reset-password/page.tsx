@@ -41,7 +41,7 @@ export default function ResetPasswordPage() {
           <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
             <span className="text-primary-foreground font-bold text-sm">F</span>
           </div>
-          <span className="font-bold text-xl tracking-tight">FinTracker</span>
+          <span className="font-bold text-xl tracking-tight">FinTrackerDuo</span>
         </div>
       </div>
 

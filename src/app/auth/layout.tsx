@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 
 export const metadata: Metadata = {
-  title: "finTrackerDuo",
+  title: "FinTrackerDuo",
   description: "Acesse sua conta ou crie uma nova",
 };
 
@@ -22,8 +22,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-2.5">
-          <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={34} height={34} />
-          <span className="font-bold text-lg tracking-tight">finTrackerDuo</span>
+          <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={34} height={34} />
+          <span className="font-bold text-lg tracking-tight">FinTrackerDuo</span>
         </div>
 
         {/* Headline */}
@@ -38,7 +38,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         {/* Copyright */}
         <p className="relative z-10 mt-10 text-xs text-white/25">
-          © {new Date().getFullYear()} finTrackerDuo. Todos os direitos reservados.
+          © {new Date().getFullYear()} FinTrackerDuo. Todos os direitos reservados.
         </p>
       </div>
 
@@ -49,8 +49,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {/* Logo mobile (visível apenas quando painel esquerdo está oculto) */}
           <div className="flex justify-center mb-8 lg:hidden">
             <div className="flex items-center gap-2">
-              <Image src="/finTrackerDuo_logo.svg" alt="finTrackerDuo" width={28} height={28} />
-              <span className="font-bold text-lg tracking-tight">finTrackerDuo</span>
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} />
+              <span className="font-bold text-lg tracking-tight">FinTrackerDuo</span>
             </div>
           </div>
 
