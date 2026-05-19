@@ -22,6 +22,10 @@ type SplitPaneViewProps = {
   panes: SplitPane[];
   /** Painel ativo por padrão no mobile. Default = primeiro pane. */
   defaultMobilePane?: string;
+  /** Modo controlado: valor do pane ativo no mobile. */
+  mobilePane?: string;
+  /** Callback quando o usuário muda de pane (modo controlado). */
+  onMobilePaneChange?: (value: string) => void;
   className?: string;
 };
 
@@ -35,10 +39,13 @@ type SplitPaneViewProps = {
 export function SplitPaneView({
   panes,
   defaultMobilePane,
+  mobilePane,
+  onMobilePaneChange,
   className,
 }: SplitPaneViewProps) {
   const gridCols = panes.map((p) => p.width).join("_");
   const defaultValue = defaultMobilePane ?? panes[0]?.id;
+  const isControlled = mobilePane !== undefined;
 
   return (
     <>
@@ -59,7 +66,9 @@ export function SplitPaneView({
       {/* Mobile: tabs */}
       <div className="lg:hidden flex flex-col flex-1 min-h-0">
         <Tabs
-          defaultValue={defaultValue}
+          value={isControlled ? mobilePane : undefined}
+          onValueChange={onMobilePaneChange}
+          defaultValue={isControlled ? undefined : defaultValue}
           className="flex flex-col h-full overflow-hidden"
         >
           <TabsList className="mx-4 mt-4 shrink-0 w-[calc(100%-2rem)]">

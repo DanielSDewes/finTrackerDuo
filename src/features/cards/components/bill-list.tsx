@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { motion } from "framer-motion";
 import { Receipt } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
@@ -87,13 +88,20 @@ export function BillList() {
                 key={key}
                 onClick={() => setSelectedBill(bill?.id ?? null, month, year)}
                 className={cn(
-                  "w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all duration-150",
-                  "hover:bg-accent",
+                  "relative w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all duration-200",
+                  "hover:bg-accent hover:translate-x-0.5",
                   isSelected
-                    ? "bg-primary/10 border border-primary/20"
-                    : "bg-muted/30 border border-transparent",
+                    ? "bg-primary/15 border-2 border-primary shadow-md shadow-primary/15 hover:translate-x-0 ring-2 ring-primary/20"
+                    : "bg-muted/30 border-2 border-transparent",
                 )}
               >
+                {isSelected && (
+                  <motion.div
+                    layoutId="selectedBillBar"
+                    className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-primary"
+                    transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                  />
+                )}
                 <div className="flex items-center gap-2.5">
                   <div className={cn(
                     "w-2 h-2 rounded-full shrink-0",
@@ -102,7 +110,7 @@ export function BillList() {
                   <div>
                     <p className={cn(
                       "text-sm font-medium",
-                      isSelected && "text-primary",
+                      isSelected && "text-primary font-bold",
                       isCurrentMonth && !isSelected && "font-semibold",
                     )}>
                       {label}
