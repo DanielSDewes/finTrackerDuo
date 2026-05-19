@@ -20,6 +20,14 @@ export const cardTransactionSchema = z.object({
   date: z.string().min(1, "Data obrigatória"),
   is_installment: z.boolean().default(false),
   installment_total: z.coerce.number().int().min(1).max(48).default(1),
+  // YYYY-MM da primeira parcela. Null = primeira parcela cai no mês da
+  // fatura atual. Quando informado, indica um parcelamento que começou em
+  // um mês anterior ("parcela antiga").
+  start_month: z
+    .string()
+    .regex(/^\d{4}-\d{2}$/, "Mês inválido")
+    .optional()
+    .nullable(),
   is_shared: z.boolean().default(false),
   is_forecast: z.boolean().default(false),
 });

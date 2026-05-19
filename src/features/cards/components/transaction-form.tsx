@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, UserRound } from "lucide-react";
@@ -33,12 +33,14 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
 
   // UI-only toggles — not part of the Zod schema
   const [forPartner, setForPartner] = useState(false);
+  const [isOldInstallment, setIsOldInstallment] = useState(false);
 
   const {
     register,
     handleSubmit,
     control,
     watch,
+    setValue,
     formState: { errors },
   } = useZodForm<typeof cardTransactionSchema, CardTransactionInput>(cardTransactionSchema, {
     defaultValues: {
@@ -49,6 +51,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
       date: new Date().toISOString().split("T")[0],
       is_installment: false,
       installment_total: 1,
+      start_month: null,
       is_shared: false,
       is_forecast: false,
     },
@@ -59,6 +62,25 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
   const installmentTotal = watch("installment_total");
   const amount = watch("amount");
 
+  // 12 meses anteriores ao mês da fatura atual (mais recente primeiro).
+  const pastMonths = useMemo(() => {
+    const result: { value: string; label: string }[] = [];
+    const currentIndex = billYear * 12 + (billMonth - 1);
+    for (let i = 1; i <= 12; i++) {
+      const idx = currentIndex - i;
+      const y = Math.floor(idx / 12);
+      const m = (idx % 12) + 1;
+      const value = `${y}-${String(m).padStart(2, "0")}`;
+      const label = new Date(Date.UTC(y, m - 1, 1)).toLocaleDateString("pt-BR", {
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC",
+      });
+      result.push({ value, label });
+    }
+    return result;
+  }, [billMonth, billYear]);
+
   const { data: categories } = useQuery({
     queryKey: ["categories", user?.id, "expense"],
     queryFn: () => categoriesService.getCategories(user!.id, "expense", couple?.id),
@@ -67,24 +89,32 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
 
   const mutation = useToastMutation({
     mutationFn: async (data: CardTransactionInput) => {
+      // start_month só faz sentido com parcelamento e quando o usuário
+      // marcou "parcela antiga" — caso contrário começa na fatura atual.
+      const payload: CardTransactionInput = {
+        ...data,
+        start_month:
+          data.is_installment && isOldInstallment ? data.start_month ?? null : null,
+      };
+
       // "Lançar para o parceiro" — full amount, partner's user_id
       if (forPartner && partnerId && couple?.id) {
         return cardsService.createTransaction(
-          { ...data, is_shared: false },
+          { ...payload, is_shared: false },
           cardId, billMonth, billYear, partnerId, couple.id
         );
       }
 
       // "Dividir com casal" — 50/50 split
-      if (data.is_shared && partnerId && couple?.id) {
+      if (payload.is_shared && partnerId && couple?.id) {
         return cardsService.splitTransaction(
-          data, cardId, billMonth, billYear, user!.id, partnerId, couple.id
+          payload, cardId, billMonth, billYear, user!.id, partnerId, couple.id
         );
       }
 
       // Regular transaction
       return cardsService.createTransaction(
-        data, cardId, billMonth, billYear, user!.id, couple?.id ?? null,
+        payload, cardId, billMonth, billYear, user!.id, couple?.id ?? null,
       );
     },
     invalidateKeys: [
@@ -190,20 +220,70 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         </div>
 
         {isInstallment && (
-          <div className="space-y-2">
-            <Label htmlFor="installment_total">Número de parcelas</Label>
-            <Input
-              id="installment_total"
-              type="number"
-              min={2}
-              max={48}
-              error={!!errors.installment_total}
-              {...register("installment_total")}
-            />
-            {errors.installment_total && (
-              <p className="text-xs text-destructive">{errors.installment_total.message}</p>
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="installment_total">Número de parcelas</Label>
+              <Input
+                id="installment_total"
+                type="number"
+                min={2}
+                max={48}
+                error={!!errors.installment_total}
+                {...register("installment_total")}
+              />
+              {errors.installment_total && (
+                <p className="text-xs text-destructive">{errors.installment_total.message}</p>
+              )}
+            </div>
+
+            {/* Parcela antiga */}
+            <div className="flex items-center justify-between pt-2 border-t border-border/40">
+              <div>
+                <Label htmlFor="is_old_installment">Parcela antiga</Label>
+                <p className="text-xs text-muted-foreground">
+                  Primeira parcela começou em um mês anterior
+                </p>
+              </div>
+              <Switch
+                id="is_old_installment"
+                checked={isOldInstallment}
+                onCheckedChange={(v) => {
+                  setIsOldInstallment(v);
+                  // Pré-seleciona o mês anterior ao abrir o seletor.
+                  if (v && !watch("start_month")) {
+                    setValue("start_month", pastMonths[0]?.value ?? null);
+                  }
+                }}
+              />
+            </div>
+
+            {isOldInstallment && (
+              <div className="space-y-2">
+                <Label>Mês da primeira parcela</Label>
+                <Controller
+                  name="start_month"
+                  control={control}
+                  render={({ field }) => (
+                    <Select
+                      value={field.value ?? ""}
+                      onValueChange={(v) => field.onChange(v)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o mês" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {pastMonths.map((m) => (
+                          <SelectItem key={m.value} value={m.value} className="capitalize">
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                />
+              </div>
             )}
-          </div>
+          </>
         )}
       </div>
 

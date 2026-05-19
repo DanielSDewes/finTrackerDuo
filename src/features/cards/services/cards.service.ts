@@ -176,17 +176,29 @@ export const cardsService = {
     userId: string,
     coupleId: string | null
   ) {
-    const { is_installment, installment_total, ...base } = input;
+    const { is_installment, installment_total, start_month, ...base } = input;
 
     if (is_installment && installment_total > 1) {
       const installmentGroupId = crypto.randomUUID();
       const perAmount = +(input.amount / installment_total).toFixed(2);
       const billsUpdated = new Set<string>();
 
+      // Índice absoluto do mês da primeira parcela.
+      // start_month ("YYYY-MM") permite começar em um mês anterior ao da
+      // fatura atual ("parcela antiga"); sem ele, começa na própria fatura.
+      let firstYear = billYear;
+      let firstMonth = billMonth;
+      if (start_month) {
+        const [sy, sm] = start_month.split("-").map(Number);
+        firstYear = sy;
+        firstMonth = sm;
+      }
+      const startIndex = firstYear * 12 + (firstMonth - 1);
+
       for (let i = 1; i <= installment_total; i++) {
-        const rawMonth = billMonth + i - 2;
-        const targetMonth = (((rawMonth % 12) + 12) % 12) + 1;
-        const targetYear = billYear + Math.floor((billMonth + i - 2) / 12);
+        const monthIndex = startIndex + (i - 1);
+        const targetYear = Math.floor(monthIndex / 12);
+        const targetMonth = (monthIndex % 12) + 1;
 
         const bill = await this.findOrCreateBill(cardId, targetMonth, targetYear);
 
@@ -250,7 +262,7 @@ export const cardsService = {
     partnerId: string,
     coupleId: string
   ) {
-    const { is_installment, installment_total } = input;
+    const { is_installment, installment_total, start_month } = input;
     const sharedGroupId = crypto.randomUUID();
 
     if (is_installment && installment_total > 1) {
@@ -259,10 +271,19 @@ export const cardsService = {
       const half = +(perInstallment / 2).toFixed(2);
       const billsUpdated = new Set<string>();
 
+      let firstYear = billYear;
+      let firstMonth = billMonth;
+      if (start_month) {
+        const [sy, sm] = start_month.split("-").map(Number);
+        firstYear = sy;
+        firstMonth = sm;
+      }
+      const startIndex = firstYear * 12 + (firstMonth - 1);
+
       for (let i = 1; i <= installment_total; i++) {
-        const rawMonth = billMonth + i - 2;
-        const targetMonth = (((rawMonth % 12) + 12) % 12) + 1;
-        const targetYear = billYear + Math.floor((billMonth + i - 2) / 12);
+        const monthIndex = startIndex + (i - 1);
+        const targetYear = Math.floor(monthIndex / 12);
+        const targetMonth = (monthIndex % 12) + 1;
 
         const bill = await this.findOrCreateBill(cardId, targetMonth, targetYear);
 
