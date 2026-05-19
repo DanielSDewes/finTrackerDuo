@@ -125,15 +125,28 @@ export function Sidebar() {
                     href={item.href}
                     onClick={() => setSidebarMobileOpen(false)}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-150",
-                      "hover:bg-accent hover:text-accent-foreground",
+                      "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                      "hover:bg-primary/8 hover:text-foreground",
+                      !sidebarCollapsed && "hover:translate-x-0.5",
                       isActive
-                        ? "bg-primary/10 text-primary hover:bg-primary/15"
+                        ? "bg-primary/12 text-primary shadow-sm hover:bg-primary/15 hover:text-primary hover:translate-x-0"
                         : "text-muted-foreground",
                       sidebarCollapsed && "justify-center px-2"
                     )}
                   >
-                    <item.icon className={cn("w-4 h-4 shrink-0", isActive && "text-primary")} />
+                    {isActive && (
+                      <motion.div
+                        layoutId="activeBar"
+                        className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+                        transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                      />
+                    )}
+                    <item.icon
+                      className={cn(
+                        "w-4 h-4 shrink-0 transition-colors",
+                        isActive ? "text-primary" : "group-hover:text-primary"
+                      )}
+                    />
                     <AnimatePresence>
                       {!sidebarCollapsed && (
                         <motion.span
@@ -148,7 +161,7 @@ export function Sidebar() {
                     </AnimatePresence>
                     {isActive && !sidebarCollapsed && (
                       <motion.div
-                        layoutId="activeIndicator"
+                        layoutId="activeDot"
                         className="ml-auto w-1.5 h-1.5 rounded-full bg-primary"
                       />
                     )}
@@ -176,18 +189,35 @@ export function Sidebar() {
         <div className="p-2 space-y-1">
           <TooltipProvider delayDuration={0}>
             {[{ href: "/settings", icon: Settings, label: "Configurações" }].map((item) => {
+              const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
               const content = (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setSidebarMobileOpen(false)}
                   className={cn(
-                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-muted-foreground transition-all",
-                    "hover:bg-accent hover:text-accent-foreground",
+                    "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
+                    "hover:bg-primary/8 hover:text-foreground",
+                    !sidebarCollapsed && "hover:translate-x-0.5",
+                    isActive
+                      ? "bg-primary/12 text-primary shadow-sm hover:bg-primary/15 hover:text-primary hover:translate-x-0"
+                      : "text-muted-foreground",
                     sidebarCollapsed && "justify-center px-2"
                   )}
                 >
-                  <item.icon className="w-4 h-4 shrink-0" />
+                  {isActive && (
+                    <motion.div
+                      layoutId="activeBar"
+                      className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-primary"
+                      transition={{ type: "spring", stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                  <item.icon
+                    className={cn(
+                      "w-4 h-4 shrink-0 transition-colors",
+                      isActive ? "text-primary" : "group-hover:text-primary"
+                    )}
+                  />
                   <AnimatePresence>
                     {!sidebarCollapsed && (
                       <motion.span
