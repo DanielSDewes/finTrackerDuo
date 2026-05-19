@@ -125,12 +125,12 @@ export function Sidebar() {
                     href={item.href}
                     onClick={() => setSidebarMobileOpen(false)}
                     className={cn(
-                      "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                      "hover:bg-primary/8 hover:text-foreground",
+                      "group relative flex items-center gap-3 px-3 py-2 rounded-lg border text-sm font-medium transition-all duration-200",
+                      "hover:border-emerald-500 hover:bg-emerald-500/10 hover:text-foreground",
                       !sidebarCollapsed && "hover:translate-x-0.5",
                       isActive
-                        ? "bg-primary/12 text-primary shadow-sm hover:bg-primary/15 hover:text-primary hover:translate-x-0"
-                        : "text-muted-foreground",
+                        ? "bg-primary/12 border-primary/30 text-primary shadow-sm hover:border-primary hover:bg-primary/15 hover:text-primary hover:translate-x-0"
+                        : "border-transparent text-muted-foreground",
                       sidebarCollapsed && "justify-center px-2"
                     )}
                   >
@@ -144,7 +144,7 @@ export function Sidebar() {
                     <item.icon
                       className={cn(
                         "w-4 h-4 shrink-0 transition-colors",
-                        isActive ? "text-primary" : "group-hover:text-primary"
+                        isActive ? "text-primary" : "group-hover:text-emerald-500"
                       )}
                     />
                     <AnimatePresence>
@@ -196,12 +196,12 @@ export function Sidebar() {
                   href={item.href}
                   onClick={() => setSidebarMobileOpen(false)}
                   className={cn(
-                    "group relative flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all duration-200",
-                    "hover:bg-primary/8 hover:text-foreground",
+                    "group relative flex items-center gap-3 px-3 py-2 rounded-lg border text-sm font-medium transition-all duration-200",
+                    "hover:border-emerald-500 hover:bg-emerald-500/10 hover:text-foreground",
                     !sidebarCollapsed && "hover:translate-x-0.5",
                     isActive
-                      ? "bg-primary/12 text-primary shadow-sm hover:bg-primary/15 hover:text-primary hover:translate-x-0"
-                      : "text-muted-foreground",
+                      ? "bg-primary/12 border-primary/30 text-primary shadow-sm hover:border-primary hover:bg-primary/15 hover:text-primary hover:translate-x-0"
+                      : "border-transparent text-muted-foreground",
                     sidebarCollapsed && "justify-center px-2"
                   )}
                 >
@@ -215,7 +215,7 @@ export function Sidebar() {
                   <item.icon
                     className={cn(
                       "w-4 h-4 shrink-0 transition-colors",
-                      isActive ? "text-primary" : "group-hover:text-primary"
+                      isActive ? "text-primary" : "group-hover:text-emerald-500"
                     )}
                   />
                   <AnimatePresence>
