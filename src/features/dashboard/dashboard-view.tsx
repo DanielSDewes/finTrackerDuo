@@ -127,85 +127,94 @@ export function DashboardView() {
           <MonthSelector />
         </div>
 
-        {/* Cards: Receitas | Saldo | Despesas */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {/* Receitas */}
-          <Card className="border-[hsl(var(--success)/0.3)] hover:border-[hsl(var(--success)/0.5)] transition-colors">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Receitas do Mês</p>
-                <div className="w-9 h-9 rounded-xl bg-[hsl(var(--success)/0.1)] flex items-center justify-center">
-                  <TrendingUp className="w-4 h-4 text-[hsl(var(--success))]" />
+        {/* Stats (coluna 1) + gráficos do mês (colunas 2 e 3) */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          {/* Coluna 1 — stats empilhados */}
+          <div className="space-y-4">
+            {/* Receitas */}
+            <Card className="border-[hsl(var(--success)/0.3)] hover:border-[hsl(var(--success)/0.5)] transition-colors">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Receitas do Mês</p>
+                  <div className="w-9 h-9 rounded-xl bg-[hsl(var(--success)/0.1)] flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-[hsl(var(--success))]" />
+                  </div>
                 </div>
-              </div>
-              {loadingTotals ? (
-                <Skeleton className="h-8 w-36 mb-2" />
-              ) : (
-                <p className="text-3xl font-bold text-[hsl(var(--success))]">{formatCurrency(income)}</p>
-              )}
-              {incomeChange !== undefined && !loadingTotals && (
-                <p className={`text-xs mt-1.5 font-medium ${incomeChange >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]"}`}>
-                  {incomeChange >= 0 ? "+" : ""}{incomeChange.toFixed(1)}% vs mês anterior
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {loadingTotals ? (
+                  <Skeleton className="h-8 w-36 mb-2" />
+                ) : (
+                  <p className="text-3xl font-bold text-[hsl(var(--success))]">{formatCurrency(income)}</p>
+                )}
+                {incomeChange !== undefined && !loadingTotals && (
+                  <p className={`text-xs mt-1.5 font-medium ${incomeChange >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]"}`}>
+                    {incomeChange >= 0 ? "+" : ""}{incomeChange.toFixed(1)}% vs mês anterior
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Saldo */}
-          <Card className={`border-2 transition-colors ${balance >= 0 ? "border-[hsl(var(--primary)/0.3)] hover:border-[hsl(var(--primary)/0.5)]" : "border-[hsl(var(--expense)/0.3)] hover:border-[hsl(var(--expense)/0.5)]"}`}>
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Saldo do Mês</p>
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${balance >= 0 ? "bg-[hsl(var(--primary)/0.1)]" : "bg-[hsl(var(--expense)/0.1)]"}`}>
-                  {balance >= 0
-                    ? <TrendingUp className="w-4 h-4 text-[hsl(var(--primary))]" />
-                    : <TrendingDown className="w-4 h-4 text-[hsl(var(--expense))]" />
-                  }
+            {/* Despesas */}
+            <Card className="border-[hsl(var(--expense)/0.3)] hover:border-[hsl(var(--expense)/0.5)] transition-colors">
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Despesas do Mês</p>
+                    {!loadingTotals && cardExpenseTotal > 0 && (
+                      <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">
+                        incl. {formatCurrency(cardExpenseTotal)} em cartões
+                      </p>
+                    )}
+                  </div>
+                  <div className="w-9 h-9 rounded-xl bg-[hsl(var(--expense)/0.1)] flex items-center justify-center">
+                    <TrendingDown className="w-4 h-4 text-[hsl(var(--expense))]" />
+                  </div>
                 </div>
-              </div>
-              {loadingTotals ? (
-                <Skeleton className="h-8 w-36 mb-2" />
-              ) : (
-                <p className={`text-3xl font-bold ${balance >= 0 ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--expense))]"}`}>
-                  {balance >= 0 ? "+" : ""}{formatCurrency(balance)}
-                </p>
-              )}
-              {!loadingTotals && (
-                <p className="text-xs mt-1.5 text-[hsl(var(--muted-foreground))] font-medium">
-                  {balance >= 0 ? "Você gastou menos do que ganhou" : "Gastos maiores que receitas"}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {loadingTotals ? (
+                  <Skeleton className="h-8 w-36 mb-2" />
+                ) : (
+                  <p className="text-3xl font-bold text-[hsl(var(--expense))]">{formatCurrency(expense)}</p>
+                )}
+                {expenseChange !== undefined && !loadingTotals && (
+                  <p className={`text-xs mt-1.5 font-medium ${expenseChange <= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]"}`}>
+                    {expenseChange >= 0 ? "+" : ""}{expenseChange.toFixed(1)}% vs mês anterior
+                  </p>
+                )}
+              </CardContent>
+            </Card>
 
-          {/* Despesas */}
-          <Card className="border-[hsl(var(--expense)/0.3)] hover:border-[hsl(var(--expense)/0.5)] transition-colors">
-            <CardContent className="p-5">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Despesas do Mês</p>
-                  {!loadingTotals && cardExpenseTotal > 0 && (
-                    <p className="text-[10px] text-[hsl(var(--muted-foreground))] mt-0.5">
-                      incl. {formatCurrency(cardExpenseTotal)} em cartões
-                    </p>
-                  )}
+            {/* Saldo */}
+            <Card className={`border-2 transition-colors ${balance >= 0 ? "border-[hsl(var(--primary)/0.3)] hover:border-[hsl(var(--primary)/0.5)]" : "border-[hsl(var(--expense)/0.3)] hover:border-[hsl(var(--expense)/0.5)]"}`}>
+              <CardContent className="p-5">
+                <div className="flex items-start justify-between mb-3">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))] font-medium">Saldo do Mês</p>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${balance >= 0 ? "bg-[hsl(var(--primary)/0.1)]" : "bg-[hsl(var(--expense)/0.1)]"}`}>
+                    {balance >= 0
+                      ? <TrendingUp className="w-4 h-4 text-[hsl(var(--primary))]" />
+                      : <TrendingDown className="w-4 h-4 text-[hsl(var(--expense))]" />
+                    }
+                  </div>
                 </div>
-                <div className="w-9 h-9 rounded-xl bg-[hsl(var(--expense)/0.1)] flex items-center justify-center">
-                  <TrendingDown className="w-4 h-4 text-[hsl(var(--expense))]" />
-                </div>
-              </div>
-              {loadingTotals ? (
-                <Skeleton className="h-8 w-36 mb-2" />
-              ) : (
-                <p className="text-3xl font-bold text-[hsl(var(--expense))]">{formatCurrency(expense)}</p>
-              )}
-              {expenseChange !== undefined && !loadingTotals && (
-                <p className={`text-xs mt-1.5 font-medium ${expenseChange <= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]"}`}>
-                  {expenseChange >= 0 ? "+" : ""}{expenseChange.toFixed(1)}% vs mês anterior
-                </p>
-              )}
-            </CardContent>
-          </Card>
+                {loadingTotals ? (
+                  <Skeleton className="h-8 w-36 mb-2" />
+                ) : (
+                  <p className={`text-3xl font-bold ${balance >= 0 ? "text-[hsl(var(--primary))]" : "text-[hsl(var(--expense))]"}`}>
+                    {balance >= 0 ? "+" : ""}{formatCurrency(balance)}
+                  </p>
+                )}
+                {!loadingTotals && (
+                  <p className="text-xs mt-1.5 text-[hsl(var(--muted-foreground))] font-medium">
+                    {balance >= 0 ? "Você gastou menos do que ganhou" : "Gastos maiores que receitas"}
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Coluna 2 — gráfico de cartão */}
+          <CardCategoryChart />
+
+          {/* Coluna 3 — gráfico de receitas/despesas por categoria */}
+          <CategoryChart />
         </div>
 
         {/* Barra proporcional Receitas vs Despesas */}
@@ -240,16 +249,8 @@ export function DashboardView() {
           </Card>
         )}
 
-        {/* Gráficos */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div className="lg:col-span-2">
-            <CashFlowChart />
-          </div>
-          <div className="space-y-4">
-            <CategoryChart />
-            <CardCategoryChart />
-          </div>
-        </div>
+        {/* Fluxo de caixa — ocupa as 3 colunas */}
+        <CashFlowChart />
 
         {/* Entradas e Saídas lado a lado */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
