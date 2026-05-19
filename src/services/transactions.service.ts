@@ -129,7 +129,7 @@ export const transactionsService = {
       .select("amount, category:categories(id,name,color,icon)")
       .is("deleted_at", null)
       .eq("type", type)
-      .eq("status", "completed")
+      .neq("status", "cancelled")
       .gte("date", startDate)
       .lte("date", endDate);
 
