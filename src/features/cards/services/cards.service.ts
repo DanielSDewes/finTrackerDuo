@@ -375,6 +375,53 @@ export const cardsService = {
 
   // ─── Dashboard summary ────────────────────────────────────────────────────
 
+  async getCardCategoryBreakdown(
+    userId: string,
+    coupleId: string | null,
+    month: number,
+    year: number,
+    isShared = false,
+  ) {
+    const supabase = createClient();
+
+    let query = supabase
+      .from("credit_card_transactions")
+      .select(
+        "amount, category:categories(id,name,color,icon), bill:credit_card_bills!inner(month,year), card:credit_cards!inner(is_shared,couple_id)",
+      )
+      .is("deleted_at", null)
+      .eq("bill.month", month)
+      .eq("bill.year", year);
+
+    if (isShared && coupleId) {
+      // Modo casal: todas as transações dos cartões compartilhados com o casal.
+      query = query.eq("card.is_shared", true).eq("card.couple_id", coupleId);
+    } else {
+      // Modo individual: apenas lançamentos do próprio usuário.
+      query = query.eq("user_id", userId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    type Row = {
+      amount: number;
+      category: { id: string; name: string; color: string } | null;
+    };
+
+    const grouped: Record<string, { name: string; value: number; color: string }> = {};
+    for (const t of (data ?? []) as unknown as Row[]) {
+      const catName = t.category?.name ?? "Sem categoria";
+      const catId = t.category?.id ?? "none";
+      if (!grouped[catId]) {
+        grouped[catId] = { name: catName, value: 0, color: t.category?.color ?? "#6366f1" };
+      }
+      grouped[catId].value += t.amount;
+    }
+
+    return Object.values(grouped).sort((a, b) => b.value - a.value);
+  },
+
   async getCardsSummary(userId: string, coupleId: string | null, month: number, year: number, isShared = false) {
     const supabase = createClient();
 

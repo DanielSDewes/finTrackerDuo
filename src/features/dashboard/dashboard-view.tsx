@@ -14,6 +14,7 @@ import { Header } from "@/components/layout/header";
 import { MonthSelector } from "@/components/shared/month-selector";
 import { CashFlowChart } from "./cash-flow-chart";
 import { CategoryChart } from "./category-chart";
+import { CardCategoryChart } from "./card-category-chart";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -244,8 +245,9 @@ export function DashboardView() {
           <div className="lg:col-span-2">
             <CashFlowChart />
           </div>
-          <div>
+          <div className="space-y-4">
             <CategoryChart />
+            <CardCategoryChart />
           </div>
         </div>
 
