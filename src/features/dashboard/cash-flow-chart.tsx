@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
+import { cardsService } from "@/features/cards/services/cards.service";
 import { formatCurrency, formatMonth } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -21,10 +22,24 @@ export function CashFlowChart() {
     enabled: !!user,
   });
 
-  const chartData = data?.map((d) => ({
-    ...d,
-    month: formatMonth(d.month + "-01"),
-  }));
+  const { data: cardsCashFlow } = useQuery({
+    queryKey: ["cash-flow", "cards", scopeKey],
+    queryFn: () =>
+      cardsService.getCardsCashFlow(user!.id, couple?.id ?? null, 6, isShared),
+    enabled: !!user,
+  });
+
+  const chartData = data?.map((d) => {
+    const cardExpense =
+      cardsCashFlow?.find((c) => c.month === d.month)?.expense ?? 0;
+    const expense = d.expense + cardExpense;
+    return {
+      ...d,
+      expense,
+      balance: d.income - expense,
+      month: formatMonth(d.month + "-01"),
+    };
+  });
 
   if (isLoading) {
     return (

@@ -2,13 +2,14 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2 } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { usePartner } from "@/hooks/use-partner";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { CardTransactionForm } from "./transaction-form";
+import { EditCardTransactionForm } from "./edit-transaction-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +38,7 @@ export function BillDetail() {
 
   const [search, setSearch] = useState("");
   const [formOpen, setFormOpen] = useState(false);
+  const [editTarget, setEditTarget] = useState<CreditCardTransaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
 
   const hasBillContext = selectedCardId && selectedBillMonth && selectedBillYear;
@@ -202,6 +204,7 @@ export function BillDetail() {
             <TransactionRow
               key={tx.id}
               tx={tx}
+              onEdit={(t) => setEditTarget(t)}
               onDelete={(target) => setDeleteTarget(target)}
               onToggleForecast={(id, val) => toggleForecastMutation.mutate({ id, isForecast: val })}
               currentUserId={user?.id ?? ""}
@@ -229,6 +232,26 @@ export function BillDetail() {
               queryClient.invalidateQueries({ queryKey: ["cards"] });
             }}
           />
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit transaction dialog (only for forecast transactions) */}
+      <Dialog open={!!editTarget} onOpenChange={(o) => !o && setEditTarget(null)}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar lançamento</DialogTitle>
+          </DialogHeader>
+          {editTarget && (
+            <EditCardTransactionForm
+              tx={editTarget}
+              onSuccess={() => {
+                setEditTarget(null);
+                queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
+                queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
+                queryClient.invalidateQueries({ queryKey: ["cards"] });
+              }}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
@@ -260,6 +283,7 @@ export function BillDetail() {
 
 function TransactionRow({
   tx,
+  onEdit,
   onDelete,
   onToggleForecast,
   currentUserId,
@@ -267,6 +291,7 @@ function TransactionRow({
   hasCouple,
 }: {
   tx: CreditCardTransaction;
+  onEdit: (tx: CreditCardTransaction) => void;
   onDelete: (target: DeleteTarget) => void;
   onToggleForecast: (id: string, isForecast: boolean) => void;
   currentUserId: string;
@@ -353,11 +378,26 @@ function TransactionRow({
 
       <RowActionsMenu
         actions={[
-          {
-            label: tx.is_forecast ? "Remover previsão" : "Marcar como previsão",
-            icon: Clock,
-            onClick: () => onToggleForecast(tx.id, !tx.is_forecast),
-          },
+          ...(tx.is_forecast
+            ? [
+                {
+                  label: "Editar",
+                  icon: Pencil,
+                  onClick: () => onEdit(tx),
+                },
+                {
+                  label: "Marcar como realizada",
+                  icon: CheckCircle2,
+                  onClick: () => onToggleForecast(tx.id, false),
+                },
+              ]
+            : [
+                {
+                  label: "Marcar como previsão",
+                  icon: Clock,
+                  onClick: () => onToggleForecast(tx.id, true),
+                },
+              ]),
           {
             label: "Remover esta parcela",
             icon: Trash2,

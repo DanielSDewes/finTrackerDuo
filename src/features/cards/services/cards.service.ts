@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/client";
 import { applyScopeFilter } from "@/lib/supabase/filters";
 import type { CreditCard, CreditCardBill, CreditCardTransaction } from "../types";
-import type { CreditCardInput, CardTransactionInput } from "../schemas/card.schema";
+import type { CreditCardInput, CardTransactionInput, CardTransactionEditInput } from "../schemas/card.schema";
 
 function endOfMonth(year: number, month: number): string {
   return new Date(Date.UTC(year, month, 0)).toISOString().split("T")[0];
@@ -359,6 +359,23 @@ export const cardsService = {
     if (error) throw error;
   },
 
+  async updateTransaction(id: string, billId: string, input: CardTransactionEditInput) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("credit_card_transactions")
+      .update({
+        title: input.title,
+        description: input.description ?? null,
+        amount: input.amount,
+        category_id: input.category_id ?? null,
+        date: input.date,
+        is_forecast: input.is_forecast,
+      })
+      .eq("id", id);
+    if (error) throw error;
+    await this.recalculateBillTotal(billId);
+  },
+
   async deleteTransaction(id: string, billId: string) {
     const supabase = createClient();
     // SECURITY DEFINER RPC bypasses the RLS UPDATE+SELECT conflict and
@@ -441,6 +458,60 @@ export const cardsService = {
     }
 
     return Object.values(grouped).sort((a, b) => b.value - a.value);
+  },
+
+  /**
+   * Expense de cartão por mês para os últimos `months` meses.
+   * - Individual: soma da minha parte (owner_amount ou partner_amount).
+   * - Casal: soma do total da fatura de cada cartão visível.
+   */
+  async getCardsCashFlow(
+    userId: string,
+    coupleId: string | null,
+    months = 6,
+    isShared = false,
+  ) {
+    const supabase = createClient();
+
+    const monthKeys: string[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      monthKeys.push(d.toISOString().slice(0, 7));
+    }
+
+    const cards = await this.getCards(userId, coupleId, isShared);
+    if (cards.length === 0) {
+      return monthKeys.map((m) => ({ month: m, expense: 0 }));
+    }
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+
+    const { data, error } = await supabase
+      .from("credit_card_bills")
+      .select("card_id, month, year, total_amount, owner_amount, partner_amount")
+      .in("card_id", Array.from(cardById.keys()));
+    if (error) throw error;
+
+    const byMonth: Record<string, number> = {};
+    for (const k of monthKeys) byMonth[k] = 0;
+
+    for (const bill of data ?? []) {
+      const key = `${bill.year}-${String(bill.month).padStart(2, "0")}`;
+      if (!(key in byMonth)) continue;
+      const card = cardById.get(bill.card_id);
+      if (!card) continue;
+
+      const amount =
+        isShared && coupleId
+          ? bill.total_amount ?? 0
+          : card.user_id === userId
+            ? bill.owner_amount ?? bill.total_amount ?? 0
+            : bill.partner_amount ?? 0;
+
+      byMonth[key] += amount;
+    }
+
+    return monthKeys.map((m) => ({ month: m, expense: byMonth[m] }));
   },
 
   async getCardsSummary(userId: string, coupleId: string | null, month: number, year: number, isShared = false) {

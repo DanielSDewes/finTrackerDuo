@@ -33,3 +33,14 @@ export const cardTransactionSchema = z.object({
 });
 
 export type CardTransactionInput = z.output<typeof cardTransactionSchema>;
+
+export const cardTransactionEditSchema = z.object({
+  title: z.string().min(1, "Título obrigatório").max(120),
+  description: z.string().max(300).optional().nullable(),
+  amount: z.coerce.number().positive("Valor deve ser positivo"),
+  category_id: z.string().uuid().optional().nullable(),
+  date: z.string().min(1, "Data obrigatória"),
+  is_forecast: z.boolean().default(false),
+});
+
+export type CardTransactionEditInput = z.output<typeof cardTransactionEditSchema>;
