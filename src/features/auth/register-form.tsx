@@ -111,6 +111,7 @@ export function RegisterForm() {
           <Label htmlFor="name">Nome completo</Label>
           <Input
             id="name"
+            autoComplete="name"
             placeholder="Seu nome"
             leftIcon={<User />}
             error={!!errors.name}
@@ -124,6 +125,7 @@ export function RegisterForm() {
           <Input
             id="email"
             type="email"
+            autoComplete="email"
             placeholder="seu@email.com"
             leftIcon={<Mail />}
             error={!!errors.email}
@@ -137,6 +139,7 @@ export function RegisterForm() {
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
             placeholder="Mínimo 8 caracteres"
             leftIcon={<Lock />}
             rightIcon={
@@ -159,6 +162,7 @@ export function RegisterForm() {
           <Input
             id="confirmPassword"
             type={showPassword ? "text" : "password"}
+            autoComplete="new-password"
             placeholder="Repita a senha"
             leftIcon={<Lock />}
             error={!!errors.confirmPassword}

@@ -121,6 +121,7 @@ export function LoginForm() {
           <Input
             id="email"
             type="email"
+            autoComplete="email"
             placeholder="seu@email.com"
             leftIcon={<Mail />}
             error={!!errors.email}
@@ -144,6 +145,7 @@ export function LoginForm() {
           <Input
             id="password"
             type={showPassword ? "text" : "password"}
+            autoComplete="current-password"
             placeholder="••••••••"
             leftIcon={<Lock />}
             rightIcon={

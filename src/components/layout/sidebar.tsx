@@ -75,7 +75,7 @@ export function Sidebar() {
         )}>
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 shrink-0">
-              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} />
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} priority />
             </div>
             <AnimatePresence>
               {!sidebarCollapsed && (

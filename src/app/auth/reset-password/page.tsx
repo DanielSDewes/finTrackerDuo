@@ -78,6 +78,7 @@ export default function ResetPasswordPage() {
                 <Input
                   id="email"
                   type="email"
+                  autoComplete="email"
                   placeholder="seu@email.com"
                   leftIcon={<Mail />}
                   error={!!errors.email}

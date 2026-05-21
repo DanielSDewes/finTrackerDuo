@@ -22,7 +22,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
 
         {/* Logo */}
         <div className="relative z-10 flex items-center gap-2.5">
-          <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={34} height={34} />
+          <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={34} height={34} priority />
           <span className="font-bold text-lg tracking-tight">FinTrackerDuo</span>
         </div>
 
@@ -49,7 +49,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           {/* Logo mobile (visível apenas quando painel esquerdo está oculto) */}
           <div className="flex justify-center mb-8 lg:hidden">
             <div className="flex items-center gap-2">
-              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} />
+              <Image src="/finTrackerDuo_logo.svg" alt="FinTrackerDuo" width={28} height={28} priority />
               <span className="font-bold text-lg tracking-tight">FinTrackerDuo</span>
             </div>
           </div>
