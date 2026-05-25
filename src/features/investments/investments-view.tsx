@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Pencil, Receipt, Percent, RefreshCw, Loader2 } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Pencil, Receipt, Percent } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -23,8 +23,6 @@ import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { InvestmentForm } from "./investment-form";
 import { AssetDetailDialog } from "./asset-detail-dialog";
 import { CurrencyStrip } from "./currency-strip";
-import { quotesService } from "@/services/quotes.service";
-import { toast } from "sonner";
 import type { Investment } from "@/types";
 
 const assetClassLabels: Record<string, string> = {
@@ -53,23 +51,6 @@ export function InvestmentsView() {
     invalidateKeys: [["investment-summary"]],
     successMessage: "Investimento removido",
     errorMessage: "Erro ao remover investimento",
-  });
-
-  const syncMutation = useToastMutation({
-    mutationFn: () => quotesService.syncPortfolioPrices(summary?.investments ?? []),
-    invalidateKeys: [["investment-summary"]],
-    errorMessage: "Erro ao sincronizar cotações",
-    onSuccess: (result) => {
-      const { updated, notFound, skipped } = result;
-      if (updated.length === 0 && notFound.length === 0) {
-        toast.info("Nenhum ativo com ticker para sincronizar");
-        return;
-      }
-      const parts = [`${updated.length} ativo${updated.length !== 1 ? "s" : ""} atualizado${updated.length !== 1 ? "s" : ""}`];
-      if (notFound.length > 0) parts.push(`${notFound.length} sem cotação (${notFound.join(", ")})`);
-      if (skipped.length > 0 && updated.length === 0) parts.push(`${skipped.length} ignorado${skipped.length !== 1 ? "s" : ""}`);
-      toast.success(parts.join(" · "));
-    },
   });
 
   const pieData = summary
@@ -236,30 +217,16 @@ export function InvestmentsView() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Ativos</h2>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => syncMutation.mutate()}
-                disabled={syncMutation.isPending || !summary?.investments?.length}
-              >
-                {syncMutation.isPending ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="w-4 h-4" />
-                )}
-                Sincronizar cotações
-              </Button>
-              <Dialog open={formOpen} onOpenChange={(o) => {
-                setFormOpen(o);
-                if (!o) setEditingInvestment(null);
-              }}>
-                <DialogTrigger asChild>
-                  <Button size="sm" onClick={() => setEditingInvestment(null)}>
-                    <Plus className="w-4 h-4" />
-                    Adicionar ativo
-                  </Button>
-                </DialogTrigger>
+            <Dialog open={formOpen} onOpenChange={(o) => {
+              setFormOpen(o);
+              if (!o) setEditingInvestment(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button size="sm" onClick={() => setEditingInvestment(null)}>
+                  <Plus className="w-4 h-4" />
+                  Adicionar ativo
+                </Button>
+              </DialogTrigger>
               <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
@@ -275,7 +242,6 @@ export function InvestmentsView() {
                 />
               </DialogContent>
             </Dialog>
-            </div>
           </div>
 
           <Tabs defaultValue="all">
