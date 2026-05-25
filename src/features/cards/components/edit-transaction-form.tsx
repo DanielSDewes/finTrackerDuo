@@ -39,6 +39,7 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
       category_id: tx.category_id,
       date: tx.date,
       is_forecast: tx.is_forecast,
+      is_reimbursed: tx.is_reimbursed,
     },
   });
 
@@ -147,6 +148,24 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
             control={control}
             render={({ field }) => (
               <Switch id="is_forecast" checked={field.value} onCheckedChange={field.onChange} />
+            )}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label htmlFor="is_reimbursed" className="text-[hsl(var(--success))]">Reembolsado</Label>
+            <p className="text-xs text-muted-foreground">
+              Mantém o valor registrado, mas o exclui de qualquer soma
+            </p>
+          </div>
+          <Controller
+            name="is_reimbursed"
+            control={control}
+            render={({ field }) => (
+              <Switch id="is_reimbursed" checked={field.value} onCheckedChange={field.onChange} />
             )}
           />
         </div>

@@ -142,6 +142,12 @@ CREATE TABLE investments (
   current_value       DECIMAL(15,2) NOT NULL DEFAULT 0,
   profitability       DECIMAL(10,4) DEFAULT 0,
   dividends_received  DECIMAL(15,2) NOT NULL DEFAULT 0,
+  -- Rendimento automático. yield_rate é fração (0.01 = 1%), na unidade
+  -- definida por yield_period. last_yield_at marca o último dia em que o
+  -- accrue rodou para este ativo (idempotência do pg_cron).
+  yield_rate          DECIMAL(12,8),
+  yield_period        TEXT CHECK (yield_period IN ('daily', 'monthly', 'annual')),
+  last_yield_at       DATE,
   is_shared           BOOLEAN NOT NULL DEFAULT FALSE,
   is_active           BOOLEAN NOT NULL DEFAULT TRUE,
   purchase_date       DATE,
@@ -149,6 +155,17 @@ CREATE TABLE investments (
   notes               TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- investment_dividends (histórico de proventos) ----
+CREATE TABLE investment_dividends (
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  investment_id   UUID NOT NULL REFERENCES investments(id) ON DELETE CASCADE,
+  user_id         UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  amount          DECIMAL(15,2) NOT NULL CHECK (amount > 0),
+  received_at     DATE NOT NULL DEFAULT CURRENT_DATE,
+  notes           TEXT,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---- goals (metas financeiras) ----
@@ -266,6 +283,9 @@ CREATE TABLE credit_card_transactions (
   is_shared             BOOLEAN NOT NULL DEFAULT FALSE,
   shared_group_id       UUID,
   is_forecast           BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Reembolsado: valor permanece registrado, mas é excluído de qualquer soma
+  -- (total da fatura, breakdown por categoria, owner/partner amounts).
+  is_reimbursed         BOOLEAN NOT NULL DEFAULT FALSE,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at            TIMESTAMPTZ
@@ -283,6 +303,9 @@ CREATE INDEX idx_transactions_deleted           ON transactions(deleted_at);
 CREATE INDEX idx_future_transactions_user_id    ON future_transactions(user_id);
 CREATE INDEX idx_future_transactions_scheduled  ON future_transactions(scheduled_date);
 CREATE INDEX idx_investments_user_id            ON investments(user_id);
+CREATE INDEX idx_investments_yield              ON investments(last_yield_at) WHERE yield_rate IS NOT NULL AND is_active = TRUE;
+CREATE INDEX idx_investment_dividends_inv       ON investment_dividends(investment_id, received_at DESC);
+CREATE INDEX idx_investment_dividends_user      ON investment_dividends(user_id);
 CREATE INDEX idx_goals_user_id                  ON goals(user_id);
 CREATE INDEX idx_accounts_user_id               ON accounts(user_id);
 CREATE INDEX idx_categories_user_id             ON categories(user_id);
@@ -407,6 +430,7 @@ ALTER TABLE categories                ENABLE ROW LEVEL SECURITY;
 ALTER TABLE transactions              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE future_transactions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments               ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investment_dividends      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goals                     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goal_contributions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goal_subgoals             ENABLE ROW LEVEL SECURITY;
@@ -571,6 +595,21 @@ CREATE POLICY "Users can view own investments" ON investments
   );
 
 CREATE POLICY "Users can manage own investments" ON investments
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- investment_dividends ----
+CREATE POLICY "Users can view own dividends" ON investment_dividends
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    investment_id IN (
+      SELECT id FROM investments
+      WHERE is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Users can manage own dividends" ON investment_dividends
   FOR ALL USING (auth.uid() = user_id);
 
 -- ---- goals ----
@@ -853,10 +892,10 @@ BEGIN
   SET deleted_at = NOW(), updated_at = NOW()
   WHERE id = p_transaction_id;
 
-  -- Recalcula total da fatura afetada
+  -- Recalcula total da fatura afetada (reembolsadas ficam de fora).
   SELECT COALESCE(SUM(amount), 0) INTO v_total
   FROM credit_card_transactions
-  WHERE bill_id = v_bill_id AND deleted_at IS NULL;
+  WHERE bill_id = v_bill_id AND deleted_at IS NULL AND is_reimbursed = FALSE;
 
   UPDATE credit_card_bills
   SET total_amount = v_total, updated_at = NOW()
@@ -912,7 +951,7 @@ BEGIN
   ) LOOP
     SELECT COALESCE(SUM(amount), 0) INTO v_total
     FROM credit_card_transactions
-    WHERE bill_id = v_bill_id AND deleted_at IS NULL;
+    WHERE bill_id = v_bill_id AND deleted_at IS NULL AND is_reimbursed = FALSE;
 
     UPDATE credit_card_bills
     SET total_amount = v_total, updated_at = NOW()
@@ -922,6 +961,135 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION soft_delete_card_installment_group(UUID) TO authenticated;
+
+
+-- ---- Accrue diário do rendimento dos investimentos ----------------------------
+-- Aplica juros compostos sobre current_value para cada investimento ativo com
+-- yield_rate definido. Converte taxas mensais/anuais para equivalente diário
+-- composto e usa last_yield_at para idempotência (rodar 2x no mesmo dia é
+-- no-op). current_price é resincronizado com current_value / quantity quando
+-- há quantidade.
+CREATE OR REPLACE FUNCTION accrue_investment_yields()
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_today DATE := CURRENT_DATE;
+BEGIN
+  UPDATE investments AS i
+  SET
+    current_value = ROUND(
+      i.current_value * POWER(
+        1 +
+          CASE i.yield_period
+            WHEN 'daily'   THEN i.yield_rate
+            WHEN 'monthly' THEN POWER(1 + i.yield_rate, 1.0 / 30.0) - 1
+            WHEN 'annual'  THEN POWER(1 + i.yield_rate, 1.0 / 365.0) - 1
+          END,
+        (v_today - COALESCE(i.last_yield_at, v_today))
+      ),
+      2
+    ),
+    current_price = CASE
+      WHEN i.quantity > 0 THEN ROUND(
+        (i.current_value * POWER(
+          1 +
+            CASE i.yield_period
+              WHEN 'daily'   THEN i.yield_rate
+              WHEN 'monthly' THEN POWER(1 + i.yield_rate, 1.0 / 30.0) - 1
+              WHEN 'annual'  THEN POWER(1 + i.yield_rate, 1.0 / 365.0) - 1
+            END,
+          (v_today - COALESCE(i.last_yield_at, v_today))
+        )) / i.quantity,
+        6
+      )
+      ELSE i.current_price
+    END,
+    profitability = CASE
+      WHEN i.invested_amount > 0 THEN ROUND(
+        (((i.current_value * POWER(
+          1 +
+            CASE i.yield_period
+              WHEN 'daily'   THEN i.yield_rate
+              WHEN 'monthly' THEN POWER(1 + i.yield_rate, 1.0 / 30.0) - 1
+              WHEN 'annual'  THEN POWER(1 + i.yield_rate, 1.0 / 365.0) - 1
+            END,
+          (v_today - COALESCE(i.last_yield_at, v_today))
+        )) - i.invested_amount) / i.invested_amount) * 100,
+        4
+      )
+      ELSE 0
+    END,
+    last_yield_at = v_today,
+    updated_at = NOW()
+  WHERE i.is_active = TRUE
+    AND i.yield_rate IS NOT NULL
+    AND i.yield_period IS NOT NULL
+    AND (i.last_yield_at IS NULL OR i.last_yield_at < v_today);
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION accrue_investment_yields() TO authenticated;
+
+-- Agendamento diário às 03:00 UTC (00:00 BRT). Requer extensão pg_cron
+-- habilitada no projeto Supabase (Dashboard → Database → Extensions → pg_cron).
+-- O CREATE EXTENSION é guardado para não falhar se já existir / não houver
+-- permissão durante um rerun do schema.
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_available_extensions WHERE name = 'pg_cron') THEN
+    BEGIN
+      CREATE EXTENSION IF NOT EXISTS pg_cron;
+    EXCEPTION WHEN insufficient_privilege THEN
+      RAISE NOTICE 'pg_cron exige privilégio de superuser; habilite manualmente no painel do Supabase.';
+    END;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    -- Remove agendamento anterior (se houver) antes de recadastrar
+    PERFORM cron.unschedule(jobid)
+    FROM cron.job
+    WHERE jobname = 'accrue_investment_yields_daily';
+
+    PERFORM cron.schedule(
+      'accrue_investment_yields_daily',
+      '0 3 * * *',
+      $cron$SELECT public.accrue_investment_yields();$cron$
+    );
+  END IF;
+END;
+$$;
+
+
+-- ---- Sync de dividendos: dividends_received <- SUM(investment_dividends) -----
+-- Mantém o agregado no investimento sempre coerente com a tabela de histórico.
+CREATE OR REPLACE FUNCTION sync_investment_dividends()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_investment_id UUID := COALESCE(NEW.investment_id, OLD.investment_id);
+  v_total         DECIMAL(15,2);
+BEGIN
+  SELECT COALESCE(SUM(amount), 0) INTO v_total
+  FROM investment_dividends
+  WHERE investment_id = v_investment_id;
+
+  UPDATE investments
+  SET dividends_received = v_total, updated_at = NOW()
+  WHERE id = v_investment_id;
+
+  RETURN NULL;
+END;
+$$;
+
+CREATE TRIGGER trg_investment_dividends_sync
+  AFTER INSERT OR UPDATE OR DELETE ON investment_dividends
+  FOR EACH ROW EXECUTE FUNCTION sync_investment_dividends();
 
 
 -- =============================================================================

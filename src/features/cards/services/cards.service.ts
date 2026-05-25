@@ -138,7 +138,8 @@ export const cardsService = {
       .from("credit_card_transactions")
       .select("amount, user_id")
       .eq("bill_id", billId)
-      .is("deleted_at", null);
+      .is("deleted_at", null)
+      .eq("is_reimbursed", false);
 
     let total = 0, ownerAmount = 0, partnerAmount = 0;
     for (const tx of data ?? []) {
@@ -359,6 +360,16 @@ export const cardsService = {
     if (error) throw error;
   },
 
+  async updateTransactionReimbursed(id: string, billId: string, isReimbursed: boolean) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("credit_card_transactions")
+      .update({ is_reimbursed: isReimbursed })
+      .eq("id", id);
+    if (error) throw error;
+    await this.recalculateBillTotal(billId);
+  },
+
   async updateTransaction(id: string, billId: string, input: CardTransactionEditInput) {
     const supabase = createClient();
     const { error } = await supabase
@@ -370,6 +381,7 @@ export const cardsService = {
         category_id: input.category_id ?? null,
         date: input.date,
         is_forecast: input.is_forecast,
+        is_reimbursed: input.is_reimbursed,
       })
       .eq("id", id);
     if (error) throw error;
@@ -428,6 +440,7 @@ export const cardsService = {
         "amount, category:categories(id,name,color,icon), bill:credit_card_bills!inner(month,year), card:credit_cards!inner(is_shared,couple_id)",
       )
       .is("deleted_at", null)
+      .eq("is_reimbursed", false)
       .eq("bill.month", month)
       .eq("bill.year", year);
 

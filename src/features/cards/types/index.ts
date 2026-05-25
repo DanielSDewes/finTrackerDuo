@@ -51,6 +51,7 @@ export type CreditCardTransaction = {
   is_shared: boolean;
   shared_group_id: string | null;
   is_forecast: boolean;
+  is_reimbursed: boolean;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

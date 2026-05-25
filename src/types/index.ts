@@ -110,6 +110,7 @@ export type FutureTransaction = {
 };
 
 export type AssetClass = "fixed_income" | "variable_income" | "crypto" | "real_estate" | "other";
+export type YieldPeriod = "daily" | "monthly" | "annual";
 
 export type Investment = {
   id: string;
@@ -127,6 +128,9 @@ export type Investment = {
   current_value: number;
   profitability: number | null;
   dividends_received: number;
+  yield_rate: number | null;
+  yield_period: YieldPeriod | null;
+  last_yield_at: string | null;
   is_shared: boolean;
   is_active: boolean;
   purchase_date: string | null;
@@ -134,6 +138,16 @@ export type Investment = {
   notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+export type InvestmentDividend = {
+  id: string;
+  investment_id: string;
+  user_id: string;
+  amount: number;
+  received_at: string;
+  notes: string | null;
+  created_at: string;
 };
 
 export type GoalCategory = "travel" | "car" | "house" | "emergency" | "retirement" | "education" | "other";

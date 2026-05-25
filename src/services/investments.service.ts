@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { applyScopeFilter } from "@/lib/supabase/filters";
-import type { Investment, AssetClass } from "@/types";
+import type { Investment, InvestmentDividend, AssetClass } from "@/types";
 
 export const investmentsService = {
   async getInvestments(userId: string, coupleId?: string | null, isShared = false) {
@@ -65,6 +65,46 @@ export const investmentsService = {
     const { error } = await supabase
       .from("investments")
       .update({ is_active: false })
+      .eq("id", id);
+    if (error) throw error;
+  },
+
+  // ─── Dividendos ───────────────────────────────────────────────────────────
+
+  async listDividends(investmentId: string) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("investment_dividends")
+      .select("*")
+      .eq("investment_id", investmentId)
+      .order("received_at", { ascending: false })
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data as InvestmentDividend[];
+  },
+
+  async addDividend(input: {
+    investment_id: string;
+    user_id: string;
+    amount: number;
+    received_at: string;
+    notes?: string | null;
+  }) {
+    const supabase = createClient();
+    const { data, error } = await supabase
+      .from("investment_dividends")
+      .insert(input)
+      .select()
+      .single();
+    if (error) throw error;
+    return data as InvestmentDividend;
+  },
+
+  async deleteDividend(id: string) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("investment_dividends")
+      .delete()
       .eq("id", id);
     if (error) throw error;
   },

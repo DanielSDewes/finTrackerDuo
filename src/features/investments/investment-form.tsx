@@ -56,6 +56,9 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
         invested_amount: investment?.invested_amount ?? 0,
         current_value: investment?.current_value ?? 0,
         dividends_received: investment?.dividends_received ?? 0,
+        // yield_rate é fração no banco; exibimos em % para o usuário.
+        yield_rate: investment?.yield_rate != null ? investment.yield_rate * 100 : null,
+        yield_period: investment?.yield_period ?? null,
         is_shared: investment?.is_shared ?? scopeShared,
         purchase_date: investment?.purchase_date ?? "",
         notes: investment?.notes ?? "",
@@ -77,11 +80,17 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
 
   const mutation = useToastMutation({
     mutationFn: async (data: InvestmentInput) => {
+      const yieldRateFraction =
+        data.yield_rate != null && data.yield_period ? data.yield_rate / 100 : null;
+      const yieldPeriod = yieldRateFraction != null ? data.yield_period ?? null : null;
+
       const payload = {
         ...data,
         user_id: user!.id,
         couple_id: couple?.id ?? null,
         is_active: true,
+        yield_rate: yieldRateFraction,
+        yield_period: yieldPeriod,
         profitability: data.invested_amount > 0
           ? ((data.current_value - data.invested_amount) / data.invested_amount) * 100
           : 0,
@@ -93,7 +102,7 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return investmentsService.createInvestment(payload as any);
     },
-    invalidateKeys: [["investments"], ["investments-summary"]],
+    invalidateKeys: [["investment-summary"]],
     successMessage: investment ? "Investimento atualizado!" : "Investimento adicionado!",
     errorMessage: "Erro ao salvar investimento",
     onSuccess: () => onSuccess?.(),
@@ -189,11 +198,64 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
           <Label>Dividendos Recebidos (R$)</Label>
-          <Input type="number" step="0.01" defaultValue={0} {...register("dividends_received")} />
+          <Input
+            type="number"
+            step="0.01"
+            readOnly
+            className="bg-muted/50"
+            {...register("dividends_received")}
+          />
+          <p className="text-[10px] text-muted-foreground">
+            Soma do histórico — lance novos dividendos na tela de detalhes.
+          </p>
         </div>
         <div className="space-y-2">
           <Label>Data de Compra</Label>
           <Input type="date" {...register("purchase_date")} />
+        </div>
+      </div>
+
+      <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
+        <div>
+          <Label className="text-sm">Rendimento automático</Label>
+          <p className="text-[11px] text-muted-foreground">
+            Se informado, o sistema aplica juros compostos diariamente no valor atual.
+          </p>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="yield_rate" className="text-xs">Taxa (%)</Label>
+            <Input
+              id="yield_rate"
+              type="number"
+              step="0.0001"
+              placeholder="Ex: 1.2"
+              {...register("yield_rate")}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Período</Label>
+            <Controller
+              name="yield_period"
+              control={control}
+              render={({ field }) => (
+                <Select
+                  value={field.value ?? "none"}
+                  onValueChange={(v) => field.onChange(v === "none" ? null : v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem rendimento</SelectItem>
+                    <SelectItem value="daily">Ao dia</SelectItem>
+                    <SelectItem value="monthly">Ao mês</SelectItem>
+                    <SelectItem value="annual">Ao ano</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+          </div>
         </div>
       </div>
 

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2 } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -79,6 +79,14 @@ export function BillDetail() {
     errorMessage: "Erro ao atualizar lançamento",
   });
 
+  const toggleReimbursedMutation = useToastMutation({
+    mutationFn: ({ id, billId, isReimbursed }: { id: string; billId: string; isReimbursed: boolean }) =>
+      cardsService.updateTransactionReimbursed(id, billId, isReimbursed),
+    invalidateKeys: billInvalidates,
+    successMessage: "Reembolso atualizado",
+    errorMessage: "Erro ao atualizar reembolso",
+  });
+
   const updateStatusMutation = useToastMutation({
     mutationFn: ({ billId, status }: { billId: string; status: "open" | "closed" | "paid" | "overdue" }) =>
       cardsService.updateBillStatus(billId, status),
@@ -102,9 +110,13 @@ export function BillDetail() {
     t.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const total = transactions.reduce((s, t) => s + t.amount, 0);
+  const total = transactions
+    .filter((t) => !t.is_reimbursed)
+    .reduce((s, t) => s + t.amount, 0);
   const myTotal = user
-    ? transactions.filter((t) => t.user_id === user.id).reduce((s, t) => s + t.amount, 0)
+    ? transactions
+        .filter((t) => t.user_id === user.id && !t.is_reimbursed)
+        .reduce((s, t) => s + t.amount, 0)
     : total;
   const hasCouple = couple?.status === "active";
 
@@ -207,6 +219,9 @@ export function BillDetail() {
               onEdit={(t) => setEditTarget(t)}
               onDelete={(target) => setDeleteTarget(target)}
               onToggleForecast={(id, val) => toggleForecastMutation.mutate({ id, isForecast: val })}
+              onToggleReimbursed={(id, billId, val) =>
+                toggleReimbursedMutation.mutate({ id, billId, isReimbursed: val })
+              }
               currentUserId={user?.id ?? ""}
               partnerFirstName={partnerFirstName}
               hasCouple={hasCouple}
@@ -286,6 +301,7 @@ function TransactionRow({
   onEdit,
   onDelete,
   onToggleForecast,
+  onToggleReimbursed,
   currentUserId,
   partnerFirstName,
   hasCouple,
@@ -294,13 +310,16 @@ function TransactionRow({
   onEdit: (tx: CreditCardTransaction) => void;
   onDelete: (target: DeleteTarget) => void;
   onToggleForecast: (id: string, isForecast: boolean) => void;
+  onToggleReimbursed: (id: string, billId: string, isReimbursed: boolean) => void;
   currentUserId: string;
   partnerFirstName: string;
   hasCouple: boolean;
 }) {
   const isOwner = tx.user_id === currentUserId;
   const isLastInstallment = tx.is_installment && tx.is_last_installment;
-  const titleColor = isLastInstallment
+  const titleColor = tx.is_reimbursed
+    ? "text-muted-foreground"
+    : isLastInstallment
     ? "text-[hsl(var(--success))]"
     : tx.is_forecast
     ? "text-orange-400"
@@ -310,7 +329,9 @@ function TransactionRow({
     <div
       className={cn(
         "flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-colors",
-        tx.is_last_installment
+        tx.is_reimbursed
+          ? "border-border/30 bg-muted/10 opacity-70"
+          : tx.is_last_installment
           ? "border-primary/20 bg-primary/5"
           : "border-border/30 bg-muted/20 hover:bg-muted/40",
       )}
@@ -352,6 +373,12 @@ function TransactionRow({
               previsão
             </Badge>
           )}
+          {tx.is_reimbursed && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-[hsl(var(--success)/0.15)] text-[hsl(var(--success))] border-0 flex items-center gap-0.5">
+              <HandCoins className="w-2.5 h-2.5" />
+              reembolsado
+            </Badge>
+          )}
           {hasCouple && (
             <Badge
               variant={isOwner ? "default" : "secondary"}
@@ -372,19 +399,24 @@ function TransactionRow({
         </p>
       </div>
 
-      <p className="text-sm font-semibold tabular-nums shrink-0">
+      <p
+        className={cn(
+          "text-sm font-semibold tabular-nums shrink-0",
+          tx.is_reimbursed && "line-through text-muted-foreground",
+        )}
+      >
         {formatCurrency(tx.amount)}
       </p>
 
       <RowActionsMenu
         actions={[
+          {
+            label: "Editar",
+            icon: Pencil,
+            onClick: () => onEdit(tx),
+          },
           ...(tx.is_forecast
             ? [
-                {
-                  label: "Editar",
-                  icon: Pencil,
-                  onClick: () => onEdit(tx),
-                },
                 {
                   label: "Marcar como realizada",
                   icon: CheckCircle2,
@@ -398,10 +430,22 @@ function TransactionRow({
                   onClick: () => onToggleForecast(tx.id, true),
                 },
               ]),
+          tx.is_reimbursed
+            ? {
+                label: "Desfazer reembolso",
+                icon: RotateCcw,
+                onClick: () => onToggleReimbursed(tx.id, tx.bill_id, false),
+              }
+            : {
+                label: "Marcar como reembolsada",
+                icon: HandCoins,
+                onClick: () => onToggleReimbursed(tx.id, tx.bill_id, true),
+              },
           {
             label: "Remover esta parcela",
             icon: Trash2,
             destructive: true,
+            separator: true,
             onClick: () => onDelete({ type: "single", tx }),
           },
           ...(tx.is_installment && tx.installment_group_id

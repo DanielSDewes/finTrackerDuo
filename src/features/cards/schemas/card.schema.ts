@@ -41,6 +41,7 @@ export const cardTransactionEditSchema = z.object({
   category_id: z.string().uuid().optional().nullable(),
   date: z.string().min(1, "Data obrigatória"),
   is_forecast: z.boolean().default(false),
+  is_reimbursed: z.boolean().default(false),
 });
 
 export type CardTransactionEditInput = z.output<typeof cardTransactionEditSchema>;

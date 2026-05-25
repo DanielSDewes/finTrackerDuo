@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Pencil } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, Trash2, Pencil, Receipt, Percent, RefreshCw, Loader2 } from "lucide-react";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend,
 } from "recharts";
@@ -21,6 +21,10 @@ import {
 } from "@/components/ui/dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { InvestmentForm } from "./investment-form";
+import { AssetDetailDialog } from "./asset-detail-dialog";
+import { CurrencyStrip } from "./currency-strip";
+import { quotesService } from "@/services/quotes.service";
+import { toast } from "sonner";
 import type { Investment } from "@/types";
 
 const assetClassLabels: Record<string, string> = {
@@ -36,6 +40,7 @@ export function InvestmentsView() {
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
+  const [detailInvestment, setDetailInvestment] = useState<Investment | null>(null);
 
   const { data: summary, isLoading } = useQuery({
     queryKey: ["investment-summary", scopeKey],
@@ -48,6 +53,23 @@ export function InvestmentsView() {
     invalidateKeys: [["investment-summary"]],
     successMessage: "Investimento removido",
     errorMessage: "Erro ao remover investimento",
+  });
+
+  const syncMutation = useToastMutation({
+    mutationFn: () => quotesService.syncPortfolioPrices(summary?.investments ?? []),
+    invalidateKeys: [["investment-summary"]],
+    errorMessage: "Erro ao sincronizar cotações",
+    onSuccess: (result) => {
+      const { updated, notFound, skipped } = result;
+      if (updated.length === 0 && notFound.length === 0) {
+        toast.info("Nenhum ativo com ticker para sincronizar");
+        return;
+      }
+      const parts = [`${updated.length} ativo${updated.length !== 1 ? "s" : ""} atualizado${updated.length !== 1 ? "s" : ""}`];
+      if (notFound.length > 0) parts.push(`${notFound.length} sem cotação (${notFound.join(", ")})`);
+      if (skipped.length > 0 && updated.length === 0) parts.push(`${skipped.length} ignorado${skipped.length !== 1 ? "s" : ""}`);
+      toast.success(parts.join(" · "));
+    },
   });
 
   const pieData = summary
@@ -68,6 +90,8 @@ export function InvestmentsView() {
       <Header title="Investimentos" subtitle="Acompanhe seu portfólio de investimentos" />
 
       <div className="p-4 sm:p-6 space-y-6">
+        <CurrencyStrip />
+
         {/* Summary cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
           {[
@@ -212,16 +236,30 @@ export function InvestmentsView() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="font-semibold">Ativos</h2>
-            <Dialog open={formOpen} onOpenChange={(o) => {
-              setFormOpen(o);
-              if (!o) setEditingInvestment(null);
-            }}>
-              <DialogTrigger asChild>
-                <Button size="sm" onClick={() => setEditingInvestment(null)}>
-                  <Plus className="w-4 h-4" />
-                  Adicionar ativo
-                </Button>
-              </DialogTrigger>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => syncMutation.mutate()}
+                disabled={syncMutation.isPending || !summary?.investments?.length}
+              >
+                {syncMutation.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="w-4 h-4" />
+                )}
+                Sincronizar cotações
+              </Button>
+              <Dialog open={formOpen} onOpenChange={(o) => {
+                setFormOpen(o);
+                if (!o) setEditingInvestment(null);
+              }}>
+                <DialogTrigger asChild>
+                  <Button size="sm" onClick={() => setEditingInvestment(null)}>
+                    <Plus className="w-4 h-4" />
+                    Adicionar ativo
+                  </Button>
+                </DialogTrigger>
               <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>
@@ -237,6 +275,7 @@ export function InvestmentsView() {
                 />
               </DialogContent>
             </Dialog>
+            </div>
           </div>
 
           <Tabs defaultValue="all">
@@ -279,7 +318,16 @@ export function InvestmentsView() {
                           return (
                             <div
                               key={investment.id}
-                              className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors group"
+                              role="button"
+                              tabIndex={0}
+                              onClick={() => setDetailInvestment(investment)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  setDetailInvestment(investment);
+                                }
+                              }}
+                              className="flex items-center gap-3 p-4 hover:bg-muted/30 transition-colors group cursor-pointer focus:outline-none focus:bg-muted/30"
                             >
                               <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
                                 <TrendingUp className="w-5 h-5 text-primary" />
@@ -291,6 +339,12 @@ export function InvestmentsView() {
                                   {investment.ticker && (
                                     <Badge variant="outline" className="text-[10px] h-4 py-0 shrink-0">
                                       {investment.ticker}
+                                    </Badge>
+                                  )}
+                                  {investment.yield_rate != null && investment.yield_period && (
+                                    <Badge className="text-[10px] h-4 py-0 shrink-0 bg-primary/15 text-primary border-0 flex items-center gap-0.5">
+                                      <Percent className="w-2.5 h-2.5" />
+                                      auto
                                     </Badge>
                                   )}
                                   {investment.is_shared && (
@@ -314,6 +368,11 @@ export function InvestmentsView() {
                               <RowActionsMenu
                                 triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
                                 actions={[
+                                  {
+                                    label: "Ver detalhes / dividendos",
+                                    icon: Receipt,
+                                    onClick: () => setDetailInvestment(investment),
+                                  },
                                   {
                                     label: "Editar",
                                     icon: Pencil,
@@ -347,6 +406,12 @@ export function InvestmentsView() {
           </Tabs>
         </div>
       </div>
+
+      <AssetDetailDialog
+        investment={detailInvestment}
+        open={!!detailInvestment}
+        onOpenChange={(o) => !o && setDetailInvestment(null)}
+      />
     </div>
   );
 }
