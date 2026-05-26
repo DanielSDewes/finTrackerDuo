@@ -1125,6 +1125,7 @@ INSERT INTO categories (id, user_id, name, type, color, icon, is_default) VALUES
   (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', 'paw-print',       TRUE),
   (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#64748b', 'repeat',          TRUE),
   (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#f43f5e', 'credit-card',     TRUE),
+  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#6366f1', 'trending-up',     TRUE),
   (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', 'more-horizontal', TRUE),
 
   -- Investimentos
