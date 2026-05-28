@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { TERMS_VERSION } from "@/features/legal/terms-version";
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request });
@@ -27,15 +28,19 @@ export async function updateSession(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser();
 
-  const isAuthPage = request.nextUrl.pathname.startsWith("/auth");
+  const { pathname } = request.nextUrl;
+  const isAuthPage = pathname.startsWith("/auth");
+  const isApiRoute = pathname.startsWith("/api");
+  const isReacceptPage = pathname === "/termos/aceite";
   const isPublicPage =
-    request.nextUrl.pathname === "/" ||
-    request.nextUrl.pathname.startsWith("/auth");
+    pathname === "/" ||
+    pathname === "/termos" ||
+    isAuthPage;
 
   if (!user && !isPublicPage) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
-    url.searchParams.set("redirectTo", request.nextUrl.pathname);
+    url.searchParams.set("redirectTo", pathname);
     return NextResponse.redirect(url);
   }
 
@@ -43,6 +48,19 @@ export async function updateSession(request: NextRequest) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
+  }
+
+  // Reaceite obrigatório quando a versão aceita difere da vigente. Não bloqueia
+  // a própria página de aceite, rotas de auth ou de API (evita quebrar fetches).
+  if (user && !isReacceptPage && !isAuthPage && !isApiRoute) {
+    const acceptedVersion = (user.user_metadata as { terms_version?: string })
+      ?.terms_version;
+    if (acceptedVersion !== TERMS_VERSION) {
+      const url = request.nextUrl.clone();
+      url.pathname = "/termos/aceite";
+      url.search = "";
+      return NextResponse.redirect(url);
+    }
   }
 
   return supabaseResponse;

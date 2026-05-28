@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
+import { TERMS_VERSION, TERMS_UPDATED } from "@/features/legal/terms-version";
 
-/** Versão dos termos — registrada junto à conta no aceite, para auditoria. */
-export const TERMS_VERSION = "1.0";
-export const TERMS_UPDATED = "28 de maio de 2026";
+export { TERMS_VERSION, TERMS_UPDATED };
 
 function Section({ n, title, children }: { n: string; title: string; children: ReactNode }) {
   return (

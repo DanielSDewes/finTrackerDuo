@@ -291,6 +291,19 @@ CREATE TABLE credit_card_transactions (
   deleted_at            TIMESTAMPTZ
 );
 
+-- ---- terms_acceptances (auditoria de aceites dos Termos de Uso) ----
+-- Append-only: registra cada aceite (cadastro ou reaceite por nova versão).
+CREATE TABLE terms_acceptances (
+  id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id      UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  version      TEXT NOT NULL,
+  accepted_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source       TEXT NOT NULL DEFAULT 'signup'
+                 CHECK (source IN ('signup', 'reaccept')),
+  user_agent   TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ---- calendar_events (agenda: eventos com data e horário opcional) ----
 CREATE TABLE calendar_events (
   id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -326,6 +339,7 @@ CREATE INDEX idx_accounts_user_id               ON accounts(user_id);
 CREATE INDEX idx_categories_user_id             ON categories(user_id);
 CREATE INDEX idx_goal_subgoals_goal_id          ON goal_subgoals(goal_id);
 CREATE INDEX idx_goal_subgoals_user_id          ON goal_subgoals(user_id);
+CREATE INDEX idx_terms_acceptances_user_id      ON terms_acceptances(user_id);
 CREATE INDEX idx_calendar_events_user_id        ON calendar_events(user_id);
 CREATE INDEX idx_calendar_events_couple_id      ON calendar_events(couple_id);
 CREATE INDEX idx_calendar_events_date           ON calendar_events(event_date);
@@ -411,6 +425,24 @@ BEGIN
     NEW.email
   )
   ON CONFLICT (id) DO NOTHING;
+
+  -- registra o aceite dos Termos feito no cadastro (auditoria). Bloco próprio
+  -- para que uma falha aqui não desfaça a criação do profile.
+  IF NEW.raw_user_meta_data ? 'terms_version' THEN
+    BEGIN
+      INSERT INTO public.terms_acceptances (user_id, version, accepted_at, source)
+      VALUES (
+        NEW.id,
+        NEW.raw_user_meta_data->>'terms_version',
+        COALESCE((NEW.raw_user_meta_data->>'terms_accepted_at')::TIMESTAMPTZ, NOW()),
+        'signup'
+      );
+    EXCEPTION
+      WHEN OTHERS THEN
+        RAISE WARNING 'terms_acceptances insert failed: % %', SQLERRM, SQLSTATE;
+    END;
+  END IF;
+
   RETURN NEW;
 EXCEPTION
   WHEN OTHERS THEN
@@ -461,6 +493,7 @@ ALTER TABLE credit_cards              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_card_bills         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_card_transactions  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_events           ENABLE ROW LEVEL SECURITY;
+ALTER TABLE terms_acceptances         ENABLE ROW LEVEL SECURITY;
 
 
 -- =============================================================================
@@ -845,6 +878,13 @@ CREATE POLICY "Couple members can delete partner card transactions" ON credit_ca
         AND status = 'active' AND partner_id IS NOT NULL
     )
   );
+
+-- ---- terms_acceptances (append-only: só leitura e inserção do próprio) ----
+CREATE POLICY "Users can view own terms acceptances" ON terms_acceptances
+  FOR SELECT USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert own terms acceptances" ON terms_acceptances
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
 
 -- ---- calendar_events ----
 CREATE POLICY "Users can view own calendar events" ON calendar_events
