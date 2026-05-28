@@ -521,8 +521,8 @@ export function LandingPage() {
               2025 FinTrackerDuo. Todos os direitos reservados.
             </p>
             <div className="flex gap-4 text-xs text-muted-foreground">
-              <a href="#" className="hover:text-foreground transition-colors">Privacidade</a>
-              <a href="#" className="hover:text-foreground transition-colors">Termos</a>
+              <Link href="/termos" className="hover:text-foreground transition-colors">Privacidade</Link>
+              <Link href="/termos" className="hover:text-foreground transition-colors">Termos</Link>
               <a href="#" className="hover:text-foreground transition-colors">Contato</a>
             </div>
           </div>
