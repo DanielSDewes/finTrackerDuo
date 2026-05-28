@@ -291,6 +291,21 @@ CREATE TABLE credit_card_transactions (
   deleted_at            TIMESTAMPTZ
 );
 
+-- ---- calendar_events (agenda: eventos com data e horário opcional) ----
+CREATE TABLE calendar_events (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id     UUID REFERENCES couples(id) ON DELETE SET NULL,
+  title         TEXT NOT NULL,
+  description   TEXT,
+  event_date    DATE NOT NULL,
+  event_time    TIME,            -- opcional: null = evento de dia todo
+  color         TEXT NOT NULL DEFAULT '#6366f1',
+  is_shared     BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 
 -- =============================================================================
 -- 3. INDEXES
@@ -311,6 +326,9 @@ CREATE INDEX idx_accounts_user_id               ON accounts(user_id);
 CREATE INDEX idx_categories_user_id             ON categories(user_id);
 CREATE INDEX idx_goal_subgoals_goal_id          ON goal_subgoals(goal_id);
 CREATE INDEX idx_goal_subgoals_user_id          ON goal_subgoals(user_id);
+CREATE INDEX idx_calendar_events_user_id        ON calendar_events(user_id);
+CREATE INDEX idx_calendar_events_couple_id      ON calendar_events(couple_id);
+CREATE INDEX idx_calendar_events_date           ON calendar_events(event_date);
 CREATE INDEX idx_credit_cards_user_id           ON credit_cards(user_id);
 CREATE INDEX idx_credit_cards_couple_id         ON credit_cards(couple_id);
 CREATE INDEX idx_credit_card_bills_card_id      ON credit_card_bills(card_id);
@@ -370,6 +388,10 @@ CREATE TRIGGER trg_credit_card_bills_updated_at
 
 CREATE TRIGGER trg_credit_card_transactions_updated_at
   BEFORE UPDATE ON credit_card_transactions
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_calendar_events_updated_at
+  BEFORE UPDATE ON calendar_events
   FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 
 -- ---- novo usuário Supabase → cria profile automaticamente ----
@@ -438,6 +460,7 @@ ALTER TABLE notifications             ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_cards              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_card_bills         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_card_transactions  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE calendar_events           ENABLE ROW LEVEL SECURITY;
 
 
 -- =============================================================================
@@ -822,6 +845,18 @@ CREATE POLICY "Couple members can delete partner card transactions" ON credit_ca
         AND status = 'active' AND partner_id IS NOT NULL
     )
   );
+
+-- ---- calendar_events ----
+CREATE POLICY "Users can view own calendar events" ON calendar_events
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own calendar events" ON calendar_events
+  FOR ALL USING (auth.uid() = user_id);
 
 
 -- =============================================================================

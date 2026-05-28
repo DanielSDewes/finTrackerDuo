@@ -251,3 +251,19 @@ export type SortOptions = {
   field: string;
   direction: "asc" | "desc";
 };
+
+export type CalendarEvent = {
+  id: string;
+  user_id: string;
+  couple_id: string | null;
+  title: string;
+  description: string | null;
+  /** Data do evento no formato YYYY-MM-DD. */
+  event_date: string;
+  /** Horário opcional. Vem do Postgres como "HH:MM:SS"; null = dia todo. */
+  event_time: string | null;
+  color: string;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+};
