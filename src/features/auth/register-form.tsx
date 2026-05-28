@@ -11,10 +11,15 @@ import { useZodForm } from "@/hooks/use-zod-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { TermsContent, TERMS_VERSION } from "@/features/legal/terms-content";
 
 export function RegisterForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [confirmationEmail, setConfirmationEmail] = useState<string | null>(null);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [termsOpen, setTermsOpen] = useState(false);
 
   const {
     register,
@@ -23,12 +28,22 @@ export function RegisterForm() {
   } = useZodForm(registerSchema);
 
   const onSubmit = async (data: RegisterInput) => {
+    if (!acceptedTerms) {
+      toast.error("É necessário aceitar os Termos de Uso para criar a conta.");
+      return;
+    }
+
     const supabase = createClient();
     const { error } = await supabase.auth.signUp({
       email: data.email,
       password: data.password,
       options: {
-        data: { name: data.name },
+        data: {
+          name: data.name,
+          terms_accepted: true,
+          terms_version: TERMS_VERSION,
+          terms_accepted_at: new Date().toISOString(),
+        },
         emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
@@ -173,7 +188,28 @@ export function RegisterForm() {
           )}
         </div>
 
-        <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
+        {/* Aceite dos Termos — obrigatório */}
+        <div className="flex items-start gap-2.5 pt-1">
+          <Checkbox
+            id="accept-terms"
+            checked={acceptedTerms}
+            onCheckedChange={(v) => setAcceptedTerms(v === true)}
+            className="mt-0.5"
+          />
+          <Label htmlFor="accept-terms" className="text-xs text-muted-foreground font-normal leading-relaxed cursor-pointer">
+            Li e concordo com os{" "}
+            <button
+              type="button"
+              onClick={() => setTermsOpen(true)}
+              className="text-primary hover:underline font-medium"
+            >
+              Termos de Uso e Política de Privacidade
+            </button>
+            .
+          </Label>
+        </div>
+
+        <Button type="submit" className="w-full" size="lg" disabled={isSubmitting || !acceptedTerms}>
           {isSubmitting ? (
             <>
               <Loader2 className="animate-spin" />
@@ -184,6 +220,28 @@ export function RegisterForm() {
           )}
         </Button>
       </form>
+
+      {/* Diálogo com os Termos de Uso completos */}
+      <Dialog open={termsOpen} onOpenChange={setTermsOpen}>
+        <DialogContent className="sm:max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="sr-only">Termos de Uso e Política de Privacidade</DialogTitle>
+          </DialogHeader>
+          <TermsContent />
+          <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 border-t border-border/50 bg-background/95 backdrop-blur-sm">
+            <Button
+              type="button"
+              className="w-full"
+              onClick={() => {
+                setAcceptedTerms(true);
+                setTermsOpen(false);
+              }}
+            >
+              Li e aceito os Termos
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Footer link */}
       <p className="text-center text-sm text-muted-foreground">
