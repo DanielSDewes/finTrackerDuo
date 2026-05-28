@@ -706,6 +706,18 @@ CREATE POLICY "Users can update own credit cards" ON credit_cards
 CREATE POLICY "Users can delete own credit cards" ON credit_cards
   FOR DELETE USING (auth.uid() = user_id);
 
+-- Membros do casal podem ver os cartões do parceiro (modo casal consolidado).
+-- Apenas SELECT: criar/editar/excluir continua restrito ao dono do cartão.
+CREATE POLICY "Couple members can view partner credit cards" ON credit_cards
+  FOR SELECT USING (
+    user_id IN (
+      SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+      FROM couples
+      WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+        AND status = 'active' AND partner_id IS NOT NULL
+    )
+  );
+
 -- ---- credit_card_bills (acesso derivado do cartão) ----
 CREATE POLICY "Users can view own bills" ON credit_card_bills
   FOR SELECT USING (
@@ -731,6 +743,21 @@ CREATE POLICY "Users can update own bills" ON credit_card_bills
 CREATE POLICY "Users can delete own bills" ON credit_card_bills
   FOR DELETE USING (
     card_id IN (SELECT id FROM credit_cards WHERE user_id = auth.uid())
+  );
+
+-- Membros do casal podem ver as faturas dos cartões do parceiro (modo casal
+-- consolidado). Apenas SELECT.
+CREATE POLICY "Couple members can view partner card bills" ON credit_card_bills
+  FOR SELECT USING (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id IN (
+        SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+        FROM couples
+        WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+          AND status = 'active' AND partner_id IS NOT NULL
+      )
+    )
   );
 
 -- ---- credit_card_transactions ----

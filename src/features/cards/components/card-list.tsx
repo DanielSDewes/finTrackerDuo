@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Plus, Pencil, Trash2, CreditCard } from "lucide-react";
+import { Plus, Pencil, Trash2, CreditCard, Users } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
+import { usePartner } from "@/hooks/use-partner";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { CardVisual } from "./card-visual";
 import { CardForm } from "./card-form";
@@ -15,11 +16,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
+import { Badge } from "@/components/ui/badge";
 import { formatCurrency } from "@/lib/utils";
 import type { CreditCard as CreditCardType } from "../types";
 
 export function CardList() {
   const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { partnerFirstName } = usePartner();
   const { selectedCardId, setSelectedCard } = useCardsStore();
 
   const [formOpen, setFormOpen] = useState(false);
@@ -118,22 +121,30 @@ export function CardList() {
               )}
 
               <div className="absolute top-2 right-2">
-                <RowActionsMenu
-                  triggerClassName="bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                  actions={[
-                    {
-                      label: "Editar",
-                      icon: Pencil,
-                      onClick: () => { setEditCard(card); setFormOpen(true); },
-                    },
-                    {
-                      label: "Remover",
-                      icon: Trash2,
-                      destructive: true,
-                      onClick: () => setDeleteCard(card),
-                    },
-                  ]}
-                />
+                {card.user_id === user?.id ? (
+                  <RowActionsMenu
+                    triggerClassName="bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                    actions={[
+                      {
+                        label: "Editar",
+                        icon: Pencil,
+                        onClick: () => { setEditCard(card); setFormOpen(true); },
+                      },
+                      {
+                        label: "Remover",
+                        icon: Trash2,
+                        destructive: true,
+                        onClick: () => setDeleteCard(card),
+                      },
+                    ]}
+                  />
+                ) : (
+                  // Cartão do parceiro: só leitura (a RLS impede editar/excluir).
+                  <Badge className="gap-1 bg-black/30 text-white border-0 text-[10px] backdrop-blur-sm">
+                    <Users className="w-3 h-3" />
+                    {partnerFirstName}
+                  </Badge>
+                )}
               </div>
             </div>
           ))

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { getInitials } from "@/lib/utils";
 
 function TokenBox({ token, label }: { token: string; label?: string }) {
@@ -63,6 +64,7 @@ export function CoupleView() {
   // Token gerado nesta sessão — exibido imediatamente após clicar "Gerar"
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [acceptToken, setAcceptToken] = useState("");
+  const [confirmDissolve, setConfirmDissolve] = useState(false);
 
   const { data: coupleData, isLoading } = useQuery({
     queryKey: ["couple", user?.id],
@@ -100,6 +102,7 @@ export function CoupleView() {
     onSuccess: () => {
       setCouple(null);
       setSessionToken(null);
+      setConfirmDissolve(false);
       queryClient.setQueryData(["couple", user?.id], null);
       queryClient.invalidateQueries({ queryKey: ["couple"] });
       toast.success("Vínculo encerrado");
@@ -204,8 +207,8 @@ export function CoupleView() {
                         As finanças compartilhadas continuarão visíveis individualmente.
                       </p>
                     </div>
-                    <Button variant="destructive" size="sm" onClick={() => dissolveMutation.mutate()} disabled={dissolveMutation.isPending}>
-                      {dissolveMutation.isPending ? <Loader2 className="animate-spin" /> : "Encerrar"}
+                    <Button variant="destructive" size="sm" onClick={() => setConfirmDissolve(true)} disabled={dissolveMutation.isPending}>
+                      {dissolveMutation.isPending ? <Loader2 className="animate-spin" /> : "Encerrar vínculo"}
                     </Button>
                   </div>
                 </CardContent>
@@ -342,6 +345,24 @@ export function CoupleView() {
           </motion.div>
         )}
       </div>
+
+      <ConfirmDeleteDialog
+        open={confirmDissolve}
+        onOpenChange={(open) => !open && setConfirmDissolve(false)}
+        title="Encerrar vínculo do casal"
+        confirmLabel="Encerrar vínculo"
+        description={
+          <>
+            Tem certeza que deseja encerrar o vínculo com{" "}
+            <strong>{partnerName ?? "seu parceiro(a)"}</strong>? O modo casal será
+            desativado para os dois. As finanças de cada um continuarão visíveis
+            individualmente. Vocês podem se reconectar a qualquer momento com um
+            novo convite.
+          </>
+        }
+        isPending={dissolveMutation.isPending}
+        onConfirm={() => dissolveMutation.mutate()}
+      />
     </div>
   );
 }

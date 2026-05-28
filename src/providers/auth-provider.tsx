@@ -20,14 +20,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (profile) setUser(profile as UserProfile);
 
-      const { data: couple } = await supabase
+      const { data: couples } = await supabase
         .from("couples")
         .select("*, owner:owner_id(id,name,email,avatar_url), partner:partner_id(id,name,email,avatar_url)")
         .or(`owner_id.eq.${userId},partner_id.eq.${userId}`)
         .eq("status", "active")
-        .maybeSingle();
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      setCouple(couple);
+      setCouple(couples?.[0] ?? null);
       setLoading(false);
     };
 

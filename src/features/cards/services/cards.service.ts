@@ -10,7 +10,7 @@ function endOfMonth(year: number, month: number): string {
 export const cardsService = {
   // ─── Cards ────────────────────────────────────────────────────────────────
 
-  async getCards(userId: string, coupleId: string | null, isShared = false) {
+  async getCards(userId: string, coupleId: string | null, isShared = false, consolidateCouple = false) {
     const supabase = createClient();
     let query = supabase
       .from("credit_cards")
@@ -18,7 +18,7 @@ export const cardsService = {
       .eq("is_active", true)
       .order("created_at");
 
-    query = applyScopeFilter(query, { userId, coupleId, isShared });
+    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple });
 
     const { data, error } = await query;
     if (error) throw error;
@@ -437,7 +437,7 @@ export const cardsService = {
     let query = supabase
       .from("credit_card_transactions")
       .select(
-        "amount, category:categories(id,name,color,icon), bill:credit_card_bills!inner(month,year), card:credit_cards!inner(is_shared,couple_id)",
+        "amount, category:categories(id,name,color,icon), bill:credit_card_bills!inner(month,year)",
       )
       .is("deleted_at", null)
       .eq("is_reimbursed", false)
@@ -445,8 +445,8 @@ export const cardsService = {
       .eq("bill.year", year);
 
     if (isShared && coupleId) {
-      // Modo casal: todas as transações dos cartões compartilhados com o casal.
-      query = query.eq("card.is_shared", true).eq("card.couple_id", coupleId);
+      // Modo casal consolidado: a RLS já restringe às transações de cartão dos
+      // dois parceiros, então não filtramos por usuário.
     } else {
       // Modo individual: apenas lançamentos do próprio usuário.
       query = query.eq("user_id", userId);
@@ -493,7 +493,7 @@ export const cardsService = {
       monthKeys.push(d.toISOString().slice(0, 7));
     }
 
-    const cards = await this.getCards(userId, coupleId, isShared);
+    const cards = await this.getCards(userId, coupleId, isShared, isShared);
     if (cards.length === 0) {
       return monthKeys.map((m) => ({ month: m, expense: 0 }));
     }
@@ -530,7 +530,7 @@ export const cardsService = {
   async getCardsSummary(userId: string, coupleId: string | null, month: number, year: number, isShared = false) {
     const supabase = createClient();
 
-    const cards = await this.getCards(userId, coupleId, isShared);
+    const cards = await this.getCards(userId, coupleId, isShared, isShared);
 
     const summary = await Promise.all(
       cards.map(async (card) => {
@@ -542,17 +542,20 @@ export const cardsService = {
           .eq("year", year)
           .maybeSingle();
 
-        // Use per-user stored amounts to avoid scanning all transactions.
-        // Falls back to total_amount for bills created before the new columns existed.
-        const userAmount = data
-          ? card.user_id === userId
-            ? (data.owner_amount ?? data.total_amount)
-            : (data.partner_amount ?? 0)
+        // Casal: fatura cheia (soma dos dois parceiros). Individual: usa os
+        // valores por usuário já calculados, evitando varrer transações.
+        // Fallback para total_amount em faturas anteriores às novas colunas.
+        const monthTotal = data
+          ? isShared && coupleId
+            ? (data.total_amount ?? 0)
+            : card.user_id === userId
+              ? (data.owner_amount ?? data.total_amount)
+              : (data.partner_amount ?? 0)
           : 0;
 
         return {
           card,
-          monthTotal: userAmount,
+          monthTotal,
           billStatus: data?.status ?? null,
         };
       })

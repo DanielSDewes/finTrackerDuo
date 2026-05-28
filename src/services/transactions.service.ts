@@ -21,7 +21,7 @@ export const transactionsService = {
       .select("*, category:categories(*), account:accounts(*)", { count: "exact" })
       .is("deleted_at", null);
 
-    query = applyScopeFilter(query, { userId, coupleId, isShared: isSharedView });
+    query = applyScopeFilter(query, { userId, coupleId, isShared: isSharedView, consolidateCouple: true });
 
     if (filters.type) query = query.eq("type", filters.type);
     if (filters.categoryId) query = query.eq("category_id", filters.categoryId);
@@ -87,7 +87,7 @@ export const transactionsService = {
       .gte("date", startDate)
       .lte("date", endDate);
 
-    query = applyScopeFilter(query, { userId, coupleId, isShared });
+    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple: true });
 
     const { data, error } = await query;
     if (error) throw error;
@@ -133,7 +133,7 @@ export const transactionsService = {
       .gte("date", startDate)
       .lte("date", endDate);
 
-    query = applyScopeFilter(query, { userId, coupleId, isShared });
+    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple: true });
 
     const { data, error } = await query;
     if (error) throw error;
