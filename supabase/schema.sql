@@ -286,6 +286,11 @@ CREATE TABLE credit_card_transactions (
   -- Reembolsado: valor permanece registrado, mas é excluído de qualquer soma
   -- (total da fatura, breakdown por categoria, owner/partner amounts).
   is_reimbursed         BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Recorrente mensal: ao marcar, copia o lançamento para todas as faturas
+  -- futuras já existentes e para qualquer fatura nova criada depois.
+  -- recurring_group_id liga todas as instâncias do mesmo recorrente.
+  is_recurring          BOOLEAN NOT NULL DEFAULT FALSE,
+  recurring_group_id    UUID,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   deleted_at            TIMESTAMPTZ
@@ -352,6 +357,7 @@ CREATE INDEX idx_cct_card_id                    ON credit_card_transactions(card
 CREATE INDEX idx_cct_user_id                    ON credit_card_transactions(user_id);
 CREATE INDEX idx_cct_installment_group          ON credit_card_transactions(installment_group_id);
 CREATE INDEX idx_cct_shared_group               ON credit_card_transactions(shared_group_id);
+CREATE INDEX idx_cct_recurring_group            ON credit_card_transactions(recurring_group_id);
 CREATE INDEX idx_cct_deleted_at                 ON credit_card_transactions(deleted_at);
 
 

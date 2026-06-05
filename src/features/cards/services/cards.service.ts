@@ -7,6 +7,17 @@ function endOfMonth(year: number, month: number): string {
   return new Date(Date.UTC(year, month, 0)).toISOString().split("T")[0];
 }
 
+// Move a YYYY-MM-DD date string into target (year, month), clamping the day to
+// the last valid day of that month (ex: 31/Jan → 28/Fev). Usado quando uma
+// recorrência precisa "viajar" para um mês com menos dias.
+function shiftDateToMonth(dateStr: string, year: number, month: number): string {
+  const [, , dStr] = dateStr.split("-");
+  const day = Number.parseInt(dStr, 10);
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  const clamped = Math.min(day, lastDay);
+  return `${year}-${String(month).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
+}
+
 export const cardsService = {
   // ─── Cards ────────────────────────────────────────────────────────────────
 
@@ -104,7 +115,182 @@ export const cardsService = {
       .select()
       .single();
     if (error) throw error;
+
+    // Fatura nova: replica recorrentes da fatura mais recente do passado.
+    // Garante que ao lançar em um mês "zerado" distante, a recorrência também
+    // apareça lá. Falhas no seed (ex.: RLS de couple) não bloqueiam a criação
+    // da fatura — só perdem a recorrência específica.
+    try {
+      await this.seedRecurringInNewBill(cardId, created as CreditCardBill);
+    } catch (e) {
+      console.warn("Failed to seed recurring transactions:", e);
+    }
+
     return created as CreditCardBill;
+  },
+
+  /**
+   * Copia em `newBill` o conjunto de recorrentes ativos no passado deste
+   * cartão. Para cada `recurring_group_id`/usuário, pega o lançamento da
+   * fatura mais recente anterior a `newBill` e clona ali. Datas são
+   * deslocadas para o mês de destino (com clamp no último dia).
+   */
+  async seedRecurringInNewBill(cardId: string, newBill: CreditCardBill): Promise<void> {
+    const supabase = createClient();
+
+    const { data: candidates } = await supabase
+      .from("credit_card_transactions")
+      .select("*, bill:credit_card_bills!inner(month, year)")
+      .eq("card_id", cardId)
+      .eq("is_recurring", true)
+      .is("deleted_at", null);
+
+    if (!candidates || candidates.length === 0) return;
+
+    const newKey = newBill.year * 12 + (newBill.month - 1);
+
+    // Para cada (recurring_group_id, user_id) pega a instância mais recente
+    // estritamente anterior ao mês da nova fatura.
+    type Candidate = {
+      id: string;
+      user_id: string;
+      couple_id: string | null;
+      title: string;
+      description: string | null;
+      amount: number;
+      category_id: string | null;
+      date: string;
+      is_shared: boolean;
+      shared_group_id: string | null;
+      recurring_group_id: string | null;
+      bill: { month: number; year: number };
+    };
+
+    const latestPerKey = new Map<string, Candidate>();
+    for (const raw of candidates as unknown as Candidate[]) {
+      if (!raw.recurring_group_id) continue;
+      const txKey = raw.bill.year * 12 + (raw.bill.month - 1);
+      if (txKey >= newKey) continue; // só passado estrito
+      const mapKey = `${raw.recurring_group_id}:${raw.user_id}`;
+      const existing = latestPerKey.get(mapKey);
+      const existingKey = existing
+        ? existing.bill.year * 12 + (existing.bill.month - 1)
+        : -Infinity;
+      if (txKey > existingKey) latestPerKey.set(mapKey, raw);
+    }
+
+    if (latestPerKey.size === 0) return;
+
+    let inserted = false;
+    for (const src of latestPerKey.values()) {
+      const { error } = await supabase.from("credit_card_transactions").insert({
+        bill_id: newBill.id,
+        card_id: cardId,
+        user_id: src.user_id,
+        couple_id: src.couple_id,
+        title: src.title,
+        description: src.description,
+        amount: src.amount,
+        category_id: src.category_id,
+        date: shiftDateToMonth(src.date, newBill.year, newBill.month),
+        is_installment: false,
+        installment_number: 1,
+        installment_total: 1,
+        is_last_installment: true,
+        is_shared: src.is_shared,
+        shared_group_id: src.shared_group_id,
+        is_forecast: true,
+        is_recurring: true,
+        recurring_group_id: src.recurring_group_id,
+      });
+      if (error) {
+        console.warn("Failed to clone recurring tx into new bill:", error.message);
+      } else {
+        inserted = true;
+      }
+    }
+
+    if (inserted) await this.recalculateBillTotal(newBill.id);
+  },
+
+  /**
+   * Replica em todas as faturas EXISTENTES estritamente posteriores a
+   * (sourceMonth/sourceYear) deste cartão um lançamento recorrente já criado
+   * (descrito em `source`). Cada cópia herda o mesmo recurring_group_id e
+   * tem a data deslocada para o mês de destino.
+   *
+   * Aceita N "linhas" por fatura (1 normal, 2 quando dividido com casal).
+   */
+  async propagateRecurringToFutureBills(
+    cardId: string,
+    sourceMonth: number,
+    sourceYear: number,
+    rows: Array<{
+      user_id: string;
+      couple_id: string | null;
+      title: string;
+      description: string | null;
+      amount: number;
+      category_id: string | null;
+      date: string;
+      is_shared: boolean;
+      shared_group_id: string | null;
+      is_forecast: boolean;
+      recurring_group_id: string;
+    }>,
+  ): Promise<void> {
+    if (rows.length === 0) return;
+    const supabase = createClient();
+
+    const sourceKey = sourceYear * 12 + (sourceMonth - 1);
+
+    const { data: futureBills } = await supabase
+      .from("credit_card_bills")
+      .select("id, month, year")
+      .eq("card_id", cardId);
+
+    const targets = (futureBills ?? []).filter(
+      (b) => b.year * 12 + (b.month - 1) > sourceKey,
+    );
+
+    if (targets.length === 0) return;
+
+    const billsTouched = new Set<string>();
+    for (const bill of targets) {
+      let inserted = false;
+      for (const row of rows) {
+        const { error } = await supabase.from("credit_card_transactions").insert({
+          bill_id: bill.id,
+          card_id: cardId,
+          user_id: row.user_id,
+          couple_id: row.couple_id,
+          title: row.title,
+          description: row.description,
+          amount: row.amount,
+          category_id: row.category_id,
+          date: shiftDateToMonth(row.date, bill.year, bill.month),
+          is_installment: false,
+          installment_number: 1,
+          installment_total: 1,
+          is_last_installment: true,
+          is_shared: row.is_shared,
+          shared_group_id: row.shared_group_id,
+          is_forecast: true,
+          is_recurring: true,
+          recurring_group_id: row.recurring_group_id,
+        });
+        if (error) {
+          console.warn("Failed to propagate recurring tx:", error.message);
+        } else {
+          inserted = true;
+        }
+      }
+      if (inserted) billsTouched.add(bill.id);
+    }
+
+    for (const billId of billsTouched) {
+      await this.recalculateBillTotal(billId);
+    }
   },
 
   async updateBillStatus(billId: string, status: CreditCardBill["status"]) {
@@ -177,7 +363,7 @@ export const cardsService = {
     userId: string,
     coupleId: string | null
   ) {
-    const { is_installment, installment_total, start_month, ...base } = input;
+    const { is_installment, installment_total, start_month, is_recurring, ...base } = input;
 
     if (is_installment && installment_total > 1) {
       const installmentGroupId = crypto.randomUUID();
@@ -232,6 +418,7 @@ export const cardsService = {
     } else {
       const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
       const supabase = createClient();
+      const recurringGroupId = is_recurring ? crypto.randomUUID() : null;
       const { error } = await supabase.from("credit_card_transactions").insert({
         bill_id: bill.id,
         card_id: cardId,
@@ -248,9 +435,29 @@ export const cardsService = {
         is_last_installment: true,
         is_shared: base.is_shared,
         is_forecast: base.is_forecast,
+        is_recurring: !!is_recurring,
+        recurring_group_id: recurringGroupId,
       });
       if (error) throw error;
       await this.recalculateBillTotal(bill.id);
+
+      if (is_recurring && recurringGroupId) {
+        await this.propagateRecurringToFutureBills(cardId, billMonth, billYear, [
+          {
+            user_id: userId,
+            couple_id: coupleId,
+            title: base.title,
+            description: base.description ?? null,
+            amount: base.amount,
+            category_id: base.category_id ?? null,
+            date: base.date,
+            is_shared: base.is_shared,
+            shared_group_id: null,
+            is_forecast: base.is_forecast,
+            recurring_group_id: recurringGroupId,
+          },
+        ]);
+      }
     }
   },
 
@@ -322,6 +529,7 @@ export const cardsService = {
     } else {
       const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
       const half = +(input.amount / 2).toFixed(2);
+      const recurringGroupId = input.is_recurring ? crypto.randomUUID() : null;
 
       const base = {
         bill_id: bill.id,
@@ -339,6 +547,8 @@ export const cardsService = {
         is_shared: true,
         shared_group_id: sharedGroupId,
         is_forecast: input.is_forecast,
+        is_recurring: !!input.is_recurring,
+        recurring_group_id: recurringGroupId,
       };
 
       const supabase = createClient();
@@ -348,6 +558,25 @@ export const cardsService = {
       ]);
       if (error) throw error;
       await this.recalculateBillTotal(bill.id);
+
+      if (input.is_recurring && recurringGroupId) {
+        const futureRow = {
+          couple_id: coupleId,
+          title: input.title,
+          description: input.description ?? null,
+          amount: half,
+          category_id: input.category_id ?? null,
+          date: input.date,
+          is_shared: true,
+          shared_group_id: sharedGroupId,
+          is_forecast: input.is_forecast,
+          recurring_group_id: recurringGroupId,
+        };
+        await this.propagateRecurringToFutureBills(cardId, billMonth, billYear, [
+          { ...futureRow, user_id: userId },
+          { ...futureRow, user_id: partnerId },
+        ]);
+      }
     }
   },
 

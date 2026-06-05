@@ -52,6 +52,8 @@ export type CreditCardTransaction = {
   shared_group_id: string | null;
   is_forecast: boolean;
   is_reimbursed: boolean;
+  is_recurring: boolean;
+  recurring_group_id: string | null;
   created_at: string;
   updated_at: string;
   deleted_at: string | null;

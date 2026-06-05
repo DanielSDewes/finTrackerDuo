@@ -30,6 +30,9 @@ export const cardTransactionSchema = z.object({
     .nullable(),
   is_shared: z.boolean().default(false),
   is_forecast: z.boolean().default(false),
+  // Recorrente mensal: replica em todas as faturas futuras já existentes
+  // e em qualquer fatura nova criada depois. Incompatível com parcelamento.
+  is_recurring: z.boolean().default(false),
 });
 
 export type CardTransactionInput = z.output<typeof cardTransactionSchema>;

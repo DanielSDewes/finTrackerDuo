@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -371,6 +371,12 @@ function TransactionRow({
             <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-orange-400/15 text-orange-400 border-0 flex items-center gap-0.5">
               <Clock className="w-2.5 h-2.5" />
               previsão
+            </Badge>
+          )}
+          {tx.is_recurring && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-sky-400/15 text-sky-400 border-0 flex items-center gap-0.5">
+              <Repeat className="w-2.5 h-2.5" />
+              recorrente
             </Badge>
           )}
           {tx.is_reimbursed && (

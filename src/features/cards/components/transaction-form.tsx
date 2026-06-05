@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, UserRound } from "lucide-react";
+import { Loader2, Repeat, UserRound } from "lucide-react";
 import { cardTransactionSchema, type CardTransactionInput } from "../schemas/card.schema";
 import { cardsService } from "../services/cards.service";
 import { useAuthStore } from "@/stores/auth.store";
@@ -54,11 +54,13 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
       start_month: null,
       is_shared: false,
       is_forecast: false,
+      is_recurring: false,
     },
   });
 
   const isInstallment = watch("is_installment");
   const isShared = watch("is_shared");
+  const isRecurring = watch("is_recurring");
   const installmentTotal = watch("installment_total");
   const amount = watch("amount");
 
@@ -207,14 +209,21 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
       <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
         <div className="flex items-center justify-between">
           <div>
-            <Label htmlFor="is_installment">Parcelado</Label>
+            <Label htmlFor="is_installment" className={isRecurring ? "opacity-40" : undefined}>
+              Parcelado
+            </Label>
             <p className="text-xs text-muted-foreground">Dividir em múltiplas faturas</p>
           </div>
           <Controller
             name="is_installment"
             control={control}
             render={({ field }) => (
-              <Switch id="is_installment" checked={field.value} onCheckedChange={field.onChange} />
+              <Switch
+                id="is_installment"
+                checked={field.value && !isRecurring}
+                onCheckedChange={field.onChange}
+                disabled={isRecurring}
+              />
             )}
           />
         </div>
@@ -285,6 +294,39 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
             )}
           </>
         )}
+      </div>
+
+      {/* Recurring toggle */}
+      <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label
+              htmlFor="is_recurring"
+              className={cn(
+                "flex items-center gap-1.5 text-sky-400",
+                isInstallment ? "opacity-40" : undefined,
+              )}
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              Recorrente
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Replica em todas as faturas futuras (existentes e novas)
+            </p>
+          </div>
+          <Controller
+            name="is_recurring"
+            control={control}
+            render={({ field }) => (
+              <Switch
+                id="is_recurring"
+                checked={field.value && !isInstallment}
+                onCheckedChange={field.onChange}
+                disabled={isInstallment}
+              />
+            )}
+          />
+        </div>
       </div>
 
       {/* Forecast toggle */}
