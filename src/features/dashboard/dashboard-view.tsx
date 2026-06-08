@@ -88,6 +88,11 @@ export function DashboardView() {
   const incomeList = monthData?.data.filter((t) => t.type === "income") ?? [];
   const expenseList = monthData?.data.filter((t) => t.type === "expense") ?? [];
 
+  // Totais dos itens efetivamente listados em cada card (somente o que
+  // aparece no header — não confundir com os totais do mês mostrados nos
+  // stats da coluna 1).
+  const incomeListedTotal = incomeList.reduce((s, t) => s + t.amount, 0);
+
   // Totais das faturas de cartão do mês
   const cardExpenseTotal = cardsSummary.reduce((s, c) => s + c.monthTotal, 0);
   const prevCardExpenseTotal = prevCardsSummary.reduce((s, c) => s + c.monthTotal, 0);
@@ -110,6 +115,9 @@ export function DashboardView() {
 
   // Cartões com fatura > 0 no mês — exibidos nas "Saídas"
   const cardBillRows = cardsSummary.filter((c) => c.monthTotal > 0);
+  const expenseListedTotal =
+    expenseList.reduce((s, t) => s + t.amount, 0) +
+    cardBillRows.reduce((s, c) => s + c.monthTotal, 0);
 
   const loadingTotals = isLoading || loadingCards;
 
@@ -261,9 +269,14 @@ export function DashboardView() {
                 <CardTitle className="text-base text-[hsl(var(--success))]">
                   Entradas do Mês
                   {!loadingList && incomeList.length > 0 && (
-                    <span className="ml-2 text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                      ({incomeList.length})
-                    </span>
+                    <>
+                      <span className="ml-2 text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                        ({incomeList.length})
+                      </span>
+                      <span className="ml-2 text-sm font-semibold text-[hsl(var(--success))] tabular-nums">
+                        {formatCurrency(incomeListedTotal)}
+                      </span>
+                    </>
                   )}
                 </CardTitle>
                 <Link href="/transactions">
@@ -333,9 +346,14 @@ export function DashboardView() {
                 <CardTitle className="text-base text-[hsl(var(--expense))]">
                   Saídas do Mês
                   {!loadingList && !loadingCards && (expenseList.length + cardBillRows.length) > 0 && (
-                    <span className="ml-2 text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                      ({expenseList.length + cardBillRows.length})
-                    </span>
+                    <>
+                      <span className="ml-2 text-xs font-normal text-[hsl(var(--muted-foreground))]">
+                        ({expenseList.length + cardBillRows.length})
+                      </span>
+                      <span className="ml-2 text-sm font-semibold text-[hsl(var(--expense))] tabular-nums">
+                        {formatCurrency(expenseListedTotal)}
+                      </span>
+                    </>
                   )}
                 </CardTitle>
                 <Link href="/transactions">
