@@ -16,7 +16,10 @@ export function CurrencyStrip() {
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ["quotes", "currencies"],
     queryFn: () => quotesService.getCurrencies(),
-    staleTime: 5 * 60 * 1000,
+    // O cron atualiza a tabela a cada 10 min. Espelhamos esse mesmo valor
+    // no staleTime para evitar re-fetch desnecessário do Supabase enquanto
+    // o usuário navega.
+    staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 

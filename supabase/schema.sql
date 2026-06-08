@@ -324,6 +324,18 @@ CREATE TABLE calendar_events (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- ---- currency_quotes (cache global de cotações USD/EUR → BRL) ----
+-- Preenchido pelo cron /api/cron/quotes (Vercel) a cada 10 min. Clientes
+-- só leem (RLS abaixo). Writes exigem service role (bypassa RLS).
+CREATE TABLE currency_quotes (
+  code        TEXT PRIMARY KEY CHECK (code IN ('USD', 'EUR')),
+  name        TEXT NOT NULL,
+  buy         DECIMAL(10,4),
+  variation   DECIMAL(10,4) NOT NULL DEFAULT 0,
+  source      TEXT,
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 
 -- =============================================================================
 -- 3. INDEXES
@@ -500,6 +512,7 @@ ALTER TABLE credit_card_bills         ENABLE ROW LEVEL SECURITY;
 ALTER TABLE credit_card_transactions  ENABLE ROW LEVEL SECURITY;
 ALTER TABLE calendar_events           ENABLE ROW LEVEL SECURITY;
 ALTER TABLE terms_acceptances         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE currency_quotes           ENABLE ROW LEVEL SECURITY;
 
 
 -- =============================================================================
@@ -903,6 +916,13 @@ CREATE POLICY "Users can view own calendar events" ON calendar_events
 
 CREATE POLICY "Users can manage own calendar events" ON calendar_events
   FOR ALL USING (auth.uid() = user_id);
+
+-- ---- currency_quotes (cache global, somente leitura para clientes) ----
+-- Writes só pela service role (rota /api/cron/quotes), que bypassa RLS.
+CREATE POLICY "Authenticated can read currency quotes" ON currency_quotes
+  FOR SELECT
+  TO authenticated
+  USING (true);
 
 
 -- =============================================================================
