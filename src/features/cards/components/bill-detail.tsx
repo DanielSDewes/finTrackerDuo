@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -124,6 +124,10 @@ export function BillDetail() {
   const billsData = queryClient.getQueryData<{ id: string; status: string }[]>(["bills", selectedCardId]);
   const currentBill = billsData?.find((b) => b.id === selectedBillId);
   const currentStatus = (currentBill?.status ?? "open") as "open" | "closed" | "paid" | "overdue";
+  // Faturas em qualquer status diferente de "open" são finalizadas: o usuário
+  // precisa reabri-las manualmente antes de adicionar novos lançamentos.
+  const isBillLocked = !!selectedBillId && currentStatus !== "open";
+  const lockedLabel = BILL_STATUS_META[currentStatus]?.label.toLowerCase() ?? "fechada";
 
   return (
     <div className="flex flex-col h-full">
@@ -175,8 +179,10 @@ export function BillDetail() {
               size="sm"
               className="h-7 gap-1 text-xs"
               onClick={() => setFormOpen(true)}
+              disabled={isBillLocked}
+              title={isBillLocked ? `Fatura ${lockedLabel} — reabra para lançar` : undefined}
             >
-              <Plus className="w-3.5 h-3.5" />
+              {isBillLocked ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
               Lançar
             </Button>
           </div>
@@ -191,6 +197,17 @@ export function BillDetail() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
+
+        {isBillLocked && (
+          <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
+            <Lock className="w-3 h-3 shrink-0" />
+            <span>
+              Fatura {lockedLabel}. Altere o status para{" "}
+              <span className="font-semibold text-foreground">Aberta</span>{" "}
+              para adicionar lançamentos.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Transaction list */}
@@ -204,7 +221,7 @@ export function BillDetail() {
             <p className="text-sm text-muted-foreground">
               {search ? "Nenhum resultado encontrado" : "Nenhum lançamento nesta fatura"}
             </p>
-            {!search && (
+            {!search && !isBillLocked && (
               <Button size="sm" variant="outline" onClick={() => setFormOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" />
                 Adicionar lançamento
