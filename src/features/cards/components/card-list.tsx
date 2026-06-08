@@ -95,30 +95,59 @@ export function CardList() {
                 }
               />
 
-              {/* Usage bar */}
-              {card.limit_amount > 0 && (
-                <div className="mt-1.5 px-1">
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
-                    <span>Utilizado</span>
-                    <span>
-                      {formatCurrency(card.total_used ?? 0)}
-                      {" / "}
-                      {formatCurrency(card.limit_amount)}
-                    </span>
+              {/* Usage bars — Consolidado (tudo) + Realizado (sem previsões) */}
+              {card.limit_amount > 0 && (() => {
+                const consolidated = card.total_used ?? 0;
+                const realized = card.total_used_real ?? 0;
+                const consolidatedPct = Math.min(100, (consolidated / card.limit_amount) * 100);
+                const realizedPct = Math.min(100, (realized / card.limit_amount) * 100);
+                return (
+                  <div className="mt-1.5 px-1 space-y-1.5">
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Limite Consolidado</span>
+                        <span>
+                          {formatCurrency(consolidated)}
+                          {" / "}
+                          {formatCurrency(card.limit_amount)}
+                        </span>
+                      </div>
+                      <div className="h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${consolidatedPct}%`,
+                            background: consolidatedPct > 80
+                              ? "hsl(var(--expense))"
+                              : "hsl(var(--primary))",
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                        <span>Limite Realizado</span>
+                        <span>
+                          {formatCurrency(realized)}
+                          {" / "}
+                          {formatCurrency(card.limit_amount)}
+                        </span>
+                      </div>
+                      <div className="h-1 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-500"
+                          style={{
+                            width: `${realizedPct}%`,
+                            background: realizedPct > 80
+                              ? "hsl(var(--expense))"
+                              : "hsl(var(--success))",
+                          }}
+                        />
+                      </div>
+                    </div>
                   </div>
-                  <div className="h-1 bg-muted rounded-full overflow-hidden">
-                    <div
-                      className="h-full rounded-full transition-all duration-500"
-                      style={{
-                        width: `${Math.min(100, ((card.total_used ?? 0) / card.limit_amount) * 100)}%`,
-                        background: ((card.total_used ?? 0) / card.limit_amount) > 0.8
-                          ? "hsl(var(--expense))"
-                          : "hsl(var(--primary))",
-                      }}
-                    />
-                  </div>
-                </div>
-              )}
+                );
+              })()}
 
               <div className="absolute top-2 right-2">
                 {card.user_id === user?.id ? (

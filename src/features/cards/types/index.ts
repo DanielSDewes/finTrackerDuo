@@ -17,6 +17,7 @@ export type CreditCard = {
   updated_at: string;
   // computed
   total_used?: number;
+  total_used_real?: number;
 };
 
 export type CreditCardBill = {

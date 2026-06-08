@@ -34,7 +34,8 @@ export const cardsService = {
     const { data, error } = await query;
     if (error) throw error;
 
-    // Attach total_used (sum of unpaid bills) per card
+    // Attach total_used (consolidado: tudo) e total_used_real (sem previsões)
+    // por cartão. Ambos somam apenas faturas não pagas.
     const cards = await Promise.all(
       (data as CreditCard[]).map(async (card) => {
         const { data: bills } = await supabase
@@ -43,7 +44,21 @@ export const cardsService = {
           .eq("card_id", card.id)
           .neq("status", "paid");
         const total_used = bills?.reduce((s, b) => s + b.total_amount, 0) ?? 0;
-        return { ...card, total_used };
+
+        // Realizado = soma das transações não reembolsadas e não previstas
+        // em faturas ainda não pagas.
+        const { data: realizedRows } = await supabase
+          .from("credit_card_transactions")
+          .select("amount, bill:credit_card_bills!inner(status)")
+          .eq("card_id", card.id)
+          .is("deleted_at", null)
+          .eq("is_reimbursed", false)
+          .eq("is_forecast", false)
+          .neq("bill.status", "paid");
+        const total_used_real =
+          (realizedRows ?? []).reduce((s, r) => s + (r.amount ?? 0), 0);
+
+        return { ...card, total_used, total_used_real };
       })
     );
 
