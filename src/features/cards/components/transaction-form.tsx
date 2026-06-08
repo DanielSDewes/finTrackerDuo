@@ -61,6 +61,7 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
   const isInstallment = watch("is_installment");
   const isShared = watch("is_shared");
   const isRecurring = watch("is_recurring");
+  const isForecast = watch("is_forecast");
   const installmentTotal = watch("installment_total");
   const amount = watch("amount");
 
@@ -169,10 +170,20 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         )}
       </div>
 
-      {/* Date */}
+      {/* Date — opcional quando o lançamento é uma previsão */}
       <div className="space-y-2">
-        <Label htmlFor="date">Data da compra</Label>
+        <Label htmlFor="date">
+          Data da compra
+          {isForecast && (
+            <span className="ml-1 text-xs font-normal text-muted-foreground">(opcional)</span>
+          )}
+        </Label>
         <Input id="date" type="date" error={!!errors.date} {...register("date")} />
+        {isForecast && (
+          <p className="text-xs text-muted-foreground">
+            Previsão sem data conhecida continua somando na fatura do mês.
+          </p>
+        )}
         {errors.date && <p className="text-xs text-destructive">{errors.date.message}</p>}
       </div>
 

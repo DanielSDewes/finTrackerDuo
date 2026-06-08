@@ -18,6 +18,18 @@ function shiftDateToMonth(dateStr: string, year: number, month: number): string 
   return `${year}-${String(month).padStart(2, "0")}-${String(clamped).padStart(2, "0")}`;
 }
 
+// Garante uma data válida para o INSERT (coluna NOT NULL). Previsões podem
+// ser criadas sem data informada — caímos no primeiro dia do mês da fatura,
+// preservando a vinculação correta com a fatura.
+function resolveTxDate(
+  date: string | null | undefined,
+  billMonth: number,
+  billYear: number,
+): string {
+  if (date && date.trim()) return date;
+  return `${billYear}-${String(billMonth).padStart(2, "0")}-01`;
+}
+
 export const cardsService = {
   // ─── Cards ────────────────────────────────────────────────────────────────
 
@@ -414,7 +426,7 @@ export const cardsService = {
           description: base.description ?? null,
           amount: perAmount,
           category_id: base.category_id ?? null,
-          date: base.date,
+          date: resolveTxDate(base.date, targetMonth, targetYear),
           is_installment: true,
           installment_group_id: installmentGroupId,
           installment_number: i,
@@ -434,6 +446,7 @@ export const cardsService = {
       const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
       const supabase = createClient();
       const recurringGroupId = is_recurring ? crypto.randomUUID() : null;
+      const effectiveDate = resolveTxDate(base.date, billMonth, billYear);
       const { error } = await supabase.from("credit_card_transactions").insert({
         bill_id: bill.id,
         card_id: cardId,
@@ -443,7 +456,7 @@ export const cardsService = {
         description: base.description ?? null,
         amount: base.amount,
         category_id: base.category_id ?? null,
-        date: base.date,
+        date: effectiveDate,
         is_installment: false,
         installment_number: 1,
         installment_total: 1,
@@ -465,7 +478,7 @@ export const cardsService = {
             description: base.description ?? null,
             amount: base.amount,
             category_id: base.category_id ?? null,
-            date: base.date,
+            date: effectiveDate,
             is_shared: base.is_shared,
             shared_group_id: null,
             is_forecast: base.is_forecast,
@@ -518,7 +531,7 @@ export const cardsService = {
           description: input.description ?? null,
           amount: half,
           category_id: input.category_id ?? null,
-          date: input.date,
+          date: resolveTxDate(input.date, targetMonth, targetYear),
           is_installment: true,
           installment_group_id: installmentGroupId,
           installment_number: i,
@@ -545,6 +558,7 @@ export const cardsService = {
       const bill = await this.findOrCreateBill(cardId, billMonth, billYear);
       const half = +(input.amount / 2).toFixed(2);
       const recurringGroupId = input.is_recurring ? crypto.randomUUID() : null;
+      const effectiveDate = resolveTxDate(input.date, billMonth, billYear);
 
       const base = {
         bill_id: bill.id,
@@ -554,7 +568,7 @@ export const cardsService = {
         description: input.description ?? null,
         amount: half,
         category_id: input.category_id ?? null,
-        date: input.date,
+        date: effectiveDate,
         is_installment: false,
         installment_number: 1,
         installment_total: 1,
@@ -581,7 +595,7 @@ export const cardsService = {
           description: input.description ?? null,
           amount: half,
           category_id: input.category_id ?? null,
-          date: input.date,
+          date: effectiveDate,
           is_shared: true,
           shared_group_id: sharedGroupId,
           is_forecast: input.is_forecast,
@@ -616,17 +630,22 @@ export const cardsService = {
 
   async updateTransaction(id: string, billId: string, input: CardTransactionEditInput) {
     const supabase = createClient();
+    // Em previsões a data é opcional: se vier vazia, preservamos a data
+    // existente para manter a coluna NOT NULL no banco.
+    const payload: Record<string, unknown> = {
+      title: input.title,
+      description: input.description ?? null,
+      amount: input.amount,
+      category_id: input.category_id ?? null,
+      is_forecast: input.is_forecast,
+      is_reimbursed: input.is_reimbursed,
+    };
+    if (input.date && input.date.trim()) {
+      payload.date = input.date;
+    }
     const { error } = await supabase
       .from("credit_card_transactions")
-      .update({
-        title: input.title,
-        description: input.description ?? null,
-        amount: input.amount,
-        category_id: input.category_id ?? null,
-        date: input.date,
-        is_forecast: input.is_forecast,
-        is_reimbursed: input.is_reimbursed,
-      })
+      .update(payload)
       .eq("id", id);
     if (error) throw error;
     await this.recalculateBillTotal(billId);

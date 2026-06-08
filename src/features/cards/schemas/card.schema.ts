@@ -12,39 +12,62 @@ export const creditCardSchema = z.object({
 
 export type CreditCardInput = z.output<typeof creditCardSchema>;
 
-export const cardTransactionSchema = z.object({
-  title: z.string().min(1, "Título obrigatório").max(120),
-  description: z.string().max(300).optional().nullable(),
-  amount: z.coerce.number().positive("Valor deve ser positivo"),
-  category_id: z.string().uuid().optional().nullable(),
-  date: z.string().min(1, "Data obrigatória"),
-  is_installment: z.boolean().default(false),
-  installment_total: z.coerce.number().int().min(1).max(48).default(1),
-  // YYYY-MM da primeira parcela. Null = primeira parcela cai no mês da
-  // fatura atual. Quando informado, indica um parcelamento que começou em
-  // um mês anterior ("parcela antiga").
-  start_month: z
-    .string()
-    .regex(/^\d{4}-\d{2}$/, "Mês inválido")
-    .optional()
-    .nullable(),
-  is_shared: z.boolean().default(false),
-  is_forecast: z.boolean().default(false),
-  // Recorrente mensal: replica em todas as faturas futuras já existentes
-  // e em qualquer fatura nova criada depois. Incompatível com parcelamento.
-  is_recurring: z.boolean().default(false),
-});
+export const cardTransactionSchema = z
+  .object({
+    title: z.string().min(1, "Título obrigatório").max(120),
+    description: z.string().max(300).optional().nullable(),
+    amount: z.coerce.number().positive("Valor deve ser positivo"),
+    category_id: z.string().uuid().optional().nullable(),
+    // Data opcional: previsões podem ser criadas sem data conhecida e ainda
+    // são contabilizadas pela fatura. Para lançamentos confirmados, a
+    // validação em `superRefine` exige um valor.
+    date: z.string().optional().nullable(),
+    is_installment: z.boolean().default(false),
+    installment_total: z.coerce.number().int().min(1).max(48).default(1),
+    // YYYY-MM da primeira parcela. Null = primeira parcela cai no mês da
+    // fatura atual. Quando informado, indica um parcelamento que começou em
+    // um mês anterior ("parcela antiga").
+    start_month: z
+      .string()
+      .regex(/^\d{4}-\d{2}$/, "Mês inválido")
+      .optional()
+      .nullable(),
+    is_shared: z.boolean().default(false),
+    is_forecast: z.boolean().default(false),
+    // Recorrente mensal: replica em todas as faturas futuras já existentes
+    // e em qualquer fatura nova criada depois. Incompatível com parcelamento.
+    is_recurring: z.boolean().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.is_forecast && !data.date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["date"],
+        message: "Data obrigatória",
+      });
+    }
+  });
 
 export type CardTransactionInput = z.output<typeof cardTransactionSchema>;
 
-export const cardTransactionEditSchema = z.object({
-  title: z.string().min(1, "Título obrigatório").max(120),
-  description: z.string().max(300).optional().nullable(),
-  amount: z.coerce.number().positive("Valor deve ser positivo"),
-  category_id: z.string().uuid().optional().nullable(),
-  date: z.string().min(1, "Data obrigatória"),
-  is_forecast: z.boolean().default(false),
-  is_reimbursed: z.boolean().default(false),
-});
+export const cardTransactionEditSchema = z
+  .object({
+    title: z.string().min(1, "Título obrigatório").max(120),
+    description: z.string().max(300).optional().nullable(),
+    amount: z.coerce.number().positive("Valor deve ser positivo"),
+    category_id: z.string().uuid().optional().nullable(),
+    date: z.string().optional().nullable(),
+    is_forecast: z.boolean().default(false),
+    is_reimbursed: z.boolean().default(false),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.is_forecast && !data.date) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["date"],
+        message: "Data obrigatória",
+      });
+    }
+  });
 
 export type CardTransactionEditInput = z.output<typeof cardTransactionEditSchema>;
