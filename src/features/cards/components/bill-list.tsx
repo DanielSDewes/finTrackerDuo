@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { Receipt } from "lucide-react";
@@ -17,19 +18,26 @@ const MONTHS_PT = [
   "Jul", "Ago", "Set", "Out", "Nov", "Dez",
 ];
 
-function buildMonthWindow(bills: CreditCardBill[]) {
-  const now = new Date();
-  const currentMonth = now.getMonth() + 1;
-  const currentYear = now.getFullYear();
+// Janela deslizante: 6 meses pra trás + mês âncora + 6 meses pra frente.
+// Toda vez que o usuário seleciona um mês, ele vira a nova âncora — assim
+// clicar num mês anterior expõe mais um mês ainda mais antigo e esconde
+// um mês futuro do final.
+const WINDOW_BEFORE = 6;
+const WINDOW_AFTER = 6;
 
+function buildMonthWindow(
+  bills: CreditCardBill[],
+  anchorMonth: number,
+  anchorYear: number,
+) {
   const billMap = new Map(bills.map((b) => [`${b.year}-${b.month}`, b]));
 
   const months: { month: number; year: number; bill: CreditCardBill | null; label: string }[] = [];
 
-  for (let offset = -6; offset <= 6; offset++) {
-    const raw = currentMonth + offset - 1;
+  for (let offset = -WINDOW_BEFORE; offset <= WINDOW_AFTER; offset++) {
+    const raw = anchorMonth + offset - 1;
     const month = ((raw % 12) + 12) % 12 + 1;
-    const year = currentYear + Math.floor(raw / 12);
+    const year = anchorYear + Math.floor(raw / 12);
     const bill = billMap.get(`${year}-${month}`) ?? null;
     months.push({ month, year, bill, label: `${MONTHS_PT[month - 1]} ${year}` });
   }
@@ -42,11 +50,25 @@ export function BillList() {
   const { user } = useAuthStore();
   const isCardOwner = !!user && user.id === selectedCardOwnerId;
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selectedRef = useRef<HTMLButtonElement>(null);
+
   const { data: bills = [], isLoading } = useQuery({
     queryKey: ["bills", selectedCardId],
     queryFn: () => cardsService.getBills(selectedCardId!),
     enabled: !!selectedCardId,
   });
+
+  // Centraliza o item selecionado quando ele muda — necessário porque a
+  // janela é deslizante e o mês selecionado deve sempre ficar visível.
+  useEffect(() => {
+    if (selectedRef.current && containerRef.current) {
+      const container = containerRef.current;
+      const el = selectedRef.current;
+      const top = el.offsetTop - container.offsetHeight / 2 + el.offsetHeight / 2;
+      container.scrollTo({ top, behavior: "smooth" });
+    }
+  }, [selectedBillMonth, selectedBillYear]);
 
   if (!selectedCardId) {
     return (
@@ -59,9 +81,16 @@ export function BillList() {
     );
   }
 
-  const months = buildMonthWindow(bills);
+  // Âncora: o mês atualmente selecionado; se nenhum foi escolhido ainda,
+  // ancora no mês corrente para abrir a tela mostrando o "hoje".
   const now = new Date();
-  const currentMonthKey = `${now.getFullYear()}-${now.getMonth() + 1}`;
+  const currentMonth = now.getMonth() + 1;
+  const currentYear = now.getFullYear();
+  const anchorMonth = selectedBillMonth ?? currentMonth;
+  const anchorYear = selectedBillYear ?? currentYear;
+
+  const months = buildMonthWindow(bills, anchorMonth, anchorYear);
+  const currentMonthKey = `${currentYear}-${currentMonth}`;
 
   return (
     <div className="flex flex-col h-full">
@@ -70,7 +99,7 @@ export function BillList() {
         <h2 className="font-semibold text-sm">Faturas</h2>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+      <div ref={containerRef} className="flex-1 overflow-y-auto p-3 space-y-1.5">
         {isLoading ? (
           Array.from({ length: 6 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full rounded-xl" />
@@ -86,6 +115,7 @@ export function BillList() {
             return (
               <button
                 key={key}
+                ref={isSelected ? selectedRef : undefined}
                 onClick={() => setSelectedBill(bill?.id ?? null, month, year)}
                 className={cn(
                   "relative w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-left transition-all duration-200",

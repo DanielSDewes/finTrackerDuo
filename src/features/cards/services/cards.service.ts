@@ -332,6 +332,21 @@ export const cardsService = {
   async recalculateBillTotal(billId: string) {
     const supabase = createClient();
 
+    // Conta primeiro as transações vivas (independente de reembolso) — se
+    // não houver nenhuma, a fatura virou casca vazia e a removemos. A UI
+    // segue mostrando o mês como célula vazia da janela deslizante, mas o
+    // banco só guarda faturas que têm lançamento.
+    const { count: liveCount } = await supabase
+      .from("credit_card_transactions")
+      .select("id", { count: "exact", head: true })
+      .eq("bill_id", billId)
+      .is("deleted_at", null);
+
+    if ((liveCount ?? 0) === 0) {
+      await supabase.from("credit_card_bills").delete().eq("id", billId);
+      return;
+    }
+
     // Resolve the card owner so we can split amounts per user
     const { data: billRow } = await supabase
       .from("credit_card_bills")

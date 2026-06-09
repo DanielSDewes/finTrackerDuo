@@ -43,12 +43,6 @@ export function BillDetail() {
 
   const hasBillContext = selectedCardId && selectedBillMonth && selectedBillYear;
 
-  const { data: transactions = [], isLoading } = useQuery({
-    queryKey: ["card-transactions", selectedBillId],
-    queryFn: () => cardsService.getBillTransactions(selectedBillId!),
-    enabled: !!selectedBillId,
-  });
-
   // Assina a mesma query das faturas que o BillList usa. Como React Query
   // deduplica por key, não há request extra — mas a reatividade volta:
   // qualquer invalidate em ["bills", selectedCardId] força o BillDetail
@@ -59,8 +53,23 @@ export function BillDetail() {
     enabled: !!selectedCardId,
   });
 
+  // Resolve o bill_id efetivo a partir do mês selecionado + cache de bills.
+  // Isso cobre dois casos: (1) mês sem fatura ainda (selectedBillId é null
+  // mas a fatura pode ter sido criada agora pela mutation), e (2) fatura
+  // recém-deletada e recriada com outro id após o cleanup do recalculate.
+  const activeBill = bills.find(
+    (b) => b.month === selectedBillMonth && b.year === selectedBillYear,
+  );
+  const effectiveBillId = activeBill?.id ?? selectedBillId ?? null;
+
+  const { data: transactions = [], isLoading } = useQuery({
+    queryKey: ["card-transactions", effectiveBillId],
+    queryFn: () => cardsService.getBillTransactions(effectiveBillId!),
+    enabled: !!effectiveBillId,
+  });
+
   const billInvalidates = [
-    ["card-transactions", selectedBillId],
+    ["card-transactions", effectiveBillId],
     ["bills", selectedCardId],
     ["cards"],
   ];
@@ -85,7 +94,7 @@ export function BillDetail() {
   const toggleForecastMutation = useToastMutation({
     mutationFn: ({ id, isForecast }: { id: string; isForecast: boolean }) =>
       cardsService.updateTransactionForecast(id, isForecast),
-    invalidateKeys: [["card-transactions", selectedBillId]],
+    invalidateKeys: [["card-transactions", effectiveBillId]],
     errorMessage: "Erro ao atualizar lançamento",
   });
 
@@ -130,14 +139,14 @@ export function BillDetail() {
     : total;
   const hasCouple = couple?.status === "active";
 
-  // Status atual da fatura selecionada — usa o resultado reativo do
-  // useQuery acima para refletir mudanças de status (closed → open) sem
-  // precisar remontar o componente.
-  const currentBill = bills.find((b) => b.id === selectedBillId);
-  const currentStatus = (currentBill?.status ?? "open") as "open" | "closed" | "paid" | "overdue";
+  // Status atual da fatura — usa o activeBill (derivado por mês/ano) ao
+  // invés de selectedBillId para sobreviver a cleanups + recriações.
+  const currentStatus = (activeBill?.status ?? "open") as "open" | "closed" | "paid" | "overdue";
   // Faturas em qualquer status diferente de "open" são finalizadas: o usuário
   // precisa reabri-las manualmente antes de adicionar novos lançamentos.
-  const isBillLocked = !!selectedBillId && currentStatus !== "open";
+  // Se ainda não existe fatura no banco (mês "vazio"), o lançamento é
+  // permitido — a fatura será criada on-demand pelo createTransaction.
+  const isBillLocked = !!activeBill && currentStatus !== "open";
   const lockedLabel = BILL_STATUS_META[currentStatus]?.label.toLowerCase() ?? "fechada";
 
   return (
@@ -164,12 +173,12 @@ export function BillDetail() {
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {selectedBillId && (
+            {activeBill && (
               <Select
                 value={currentStatus}
                 onValueChange={(v) =>
                   updateStatusMutation.mutate({
-                    billId: selectedBillId,
+                    billId: activeBill.id,
                     status: v as "open" | "closed" | "paid" | "overdue",
                   })
                 }
@@ -270,7 +279,7 @@ export function BillDetail() {
             billYear={selectedBillYear}
             onSuccess={() => {
               setFormOpen(false);
-              queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
+              queryClient.invalidateQueries({ queryKey: ["card-transactions", effectiveBillId] });
               queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
               queryClient.invalidateQueries({ queryKey: ["cards"] });
             }}
@@ -289,7 +298,7 @@ export function BillDetail() {
               tx={editTarget}
               onSuccess={() => {
                 setEditTarget(null);
-                queryClient.invalidateQueries({ queryKey: ["card-transactions", selectedBillId] });
+                queryClient.invalidateQueries({ queryKey: ["card-transactions", effectiveBillId] });
                 queryClient.invalidateQueries({ queryKey: ["bills", selectedCardId] });
                 queryClient.invalidateQueries({ queryKey: ["cards"] });
               }}
