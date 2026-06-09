@@ -49,6 +49,16 @@ export function BillDetail() {
     enabled: !!selectedBillId,
   });
 
+  // Assina a mesma query das faturas que o BillList usa. Como React Query
+  // deduplica por key, não há request extra — mas a reatividade volta:
+  // qualquer invalidate em ["bills", selectedCardId] força o BillDetail
+  // a rerenderizar com o status atualizado.
+  const { data: bills = [] } = useQuery({
+    queryKey: ["bills", selectedCardId],
+    queryFn: () => cardsService.getBills(selectedCardId!),
+    enabled: !!selectedCardId,
+  });
+
   const billInvalidates = [
     ["card-transactions", selectedBillId],
     ["bills", selectedCardId],
@@ -120,9 +130,10 @@ export function BillDetail() {
     : total;
   const hasCouple = couple?.status === "active";
 
-  // Find current bill status from transactions context — we'll read it from the bills query cache
-  const billsData = queryClient.getQueryData<{ id: string; status: string }[]>(["bills", selectedCardId]);
-  const currentBill = billsData?.find((b) => b.id === selectedBillId);
+  // Status atual da fatura selecionada — usa o resultado reativo do
+  // useQuery acima para refletir mudanças de status (closed → open) sem
+  // precisar remontar o componente.
+  const currentBill = bills.find((b) => b.id === selectedBillId);
   const currentStatus = (currentBill?.status ?? "open") as "open" | "closed" | "paid" | "overdue";
   // Faturas em qualquer status diferente de "open" são finalizadas: o usuário
   // precisa reabri-las manualmente antes de adicionar novos lançamentos.
