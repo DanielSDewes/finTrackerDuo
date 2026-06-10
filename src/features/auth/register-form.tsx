@@ -7,6 +7,7 @@ import { Eye, EyeOff, Loader2, Mail, Lock, User, MailCheck } from "lucide-react"
 import { toast } from "sonner";
 import { registerSchema, type RegisterInput } from "@/schemas/auth";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthError } from "@/features/auth/error-messages";
 import { useZodForm } from "@/hooks/use-zod-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,8 @@ export function RegisterForm() {
     });
 
     if (error) {
-      toast.error("Erro ao criar conta", { description: error.message });
+      const friendly = translateAuthError(error, "Erro ao criar conta");
+      toast.error(friendly.title, { description: friendly.description });
       return;
     }
 

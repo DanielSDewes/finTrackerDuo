@@ -8,6 +8,7 @@ import { Eye, EyeOff, Loader2, Mail, Lock, MailWarning } from "lucide-react";
 import { toast } from "sonner";
 import { loginSchema, type LoginInput } from "@/schemas/auth";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthError } from "@/features/auth/error-messages";
 import { useZodForm } from "@/hooks/use-zod-form";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -49,7 +50,8 @@ export function LoginForm() {
         return;
       }
 
-      toast.error("Credenciais inválidas", { description: "Verifique seu email e senha." });
+      const friendly = translateAuthError(error, "Não foi possível entrar");
+      toast.error(friendly.title, { description: friendly.description });
       return;
     }
 

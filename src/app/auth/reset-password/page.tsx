@@ -9,6 +9,7 @@ import { ArrowLeft, Mail, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
 import { resetPasswordSchema, type ResetPasswordInput } from "@/schemas/auth";
 import { createClient } from "@/lib/supabase/client";
+import { translateAuthError } from "@/features/auth/error-messages";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,7 +28,8 @@ export default function ResetPasswordPage() {
     });
 
     if (error) {
-      toast.error("Erro ao enviar email", { description: error.message });
+      const friendly = translateAuthError(error, "Erro ao enviar email");
+      toast.error(friendly.title, { description: friendly.description });
       return;
     }
 
