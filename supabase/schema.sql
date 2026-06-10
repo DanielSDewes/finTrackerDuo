@@ -1234,33 +1234,81 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 -- =============================================================================
 -- 9. SEED — categorias padrão
 -- =============================================================================
+-- Paleta organizada para o gráfico de pizza do dashboard:
+-- - Receitas em verdes/teals (sinal de entrada).
+-- - Despesas espalhadas por todo o spectrum (vermelho/laranja/azul/roxo etc.)
+--   para diferenciar visualmente quando o usuário tem muitas categorias.
+-- - Investimentos em azul/violeta/laranja, sem repetir tons das despesas.
+-- Cada cor é única dentro do tipo (e entre tipos, exceto pelo "Outros" cinza,
+-- que é genérico e propositalmente neutro).
 INSERT INTO categories (id, user_id, name, type, color, icon, is_default) VALUES
   -- Receitas
-  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#22c55e', 'briefcase',       TRUE),
-  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#10b981', 'laptop',          TRUE),
-  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#6366f1', 'trending-up',     TRUE),
-  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#8b5cf6', 'plus-circle',     TRUE),
+  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#16a34a', 'briefcase',       TRUE),
+  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#0d9488', 'laptop',          TRUE),
+  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#65a30d', 'trending-up',     TRUE),
+  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#059669', 'plus-circle',     TRUE),
 
   -- Despesas
-  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#ef4444', 'home',            TRUE),
-  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#f97316', 'utensils',        TRUE),
-  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#eab308', 'car',             TRUE),
-  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#06b6d4', 'heart-pulse',     TRUE),
-  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#3b82f6', 'graduation-cap',  TRUE),
-  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#ec4899', 'gamepad-2',       TRUE),
-  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#a855f7', 'shirt',           TRUE),
-  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#f472b6', 'gift',            TRUE),
+  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#dc2626', 'home',            TRUE),
+  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#ea580c', 'utensils',        TRUE),
+  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#ca8a04', 'car',             TRUE),
+  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#0891b2', 'heart-pulse',     TRUE),
+  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#2563eb', 'graduation-cap',  TRUE),
+  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#db2777', 'gamepad-2',       TRUE),
+  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#9333ea', 'shirt',           TRUE),
+  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#e11d48', 'gift',            TRUE),
   (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', 'paw-print',       TRUE),
-  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#64748b', 'repeat',          TRUE),
-  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#f43f5e', 'credit-card',     TRUE),
-  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#6366f1', 'trending-up',     TRUE),
+  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#475569', 'repeat',          TRUE),
+  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#c026d3', 'credit-card',     TRUE),
+  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#4f46e5', 'trending-up',     TRUE),
   (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', 'more-horizontal', TRUE),
 
   -- Investimentos
-  (uuid_generate_v4(), NULL, 'Renda Fixa',          'investment', '#6366f1', 'shield',          TRUE),
-  (uuid_generate_v4(), NULL, 'Renda Variável',      'investment', '#8b5cf6', 'trending-up',     TRUE),
-  (uuid_generate_v4(), NULL, 'Fundos Imobiliários', 'investment', '#7c3aed', 'building-2',      TRUE),
-  (uuid_generate_v4(), NULL, 'Criptomoedas',        'investment', '#a78bfa', 'bitcoin',         TRUE);
+  (uuid_generate_v4(), NULL, 'Renda Fixa',          'investment', '#0284c7', 'shield',          TRUE),
+  (uuid_generate_v4(), NULL, 'Renda Variável',      'investment', '#7c3aed', 'trending-up',     TRUE),
+  (uuid_generate_v4(), NULL, 'Fundos Imobiliários', 'investment', '#be185d', 'building-2',      TRUE),
+  (uuid_generate_v4(), NULL, 'Criptomoedas',        'investment', '#f97316', 'bitcoin',         TRUE);
+
+
+-- =============================================================================
+-- 9.1. REFRESH DE CORES — para installs existentes
+-- =============================================================================
+-- Os INSERTs acima só rodam em setup fresco. Em bancos já populados, aplique
+-- estes UPDATEs no SQL Editor do Supabase para repintar as categorias default
+-- com a paleta nova (custom categories dos usuários não são tocadas, porque
+-- filtramos por is_default = TRUE).
+UPDATE categories SET color = CASE name
+  WHEN 'Salário'        THEN '#16a34a'
+  WHEN 'Freelance'      THEN '#0d9488'
+  WHEN 'Investimentos'  THEN '#65a30d'
+  WHEN 'Outros'         THEN '#059669'
+  ELSE color
+END WHERE type = 'income' AND is_default = TRUE;
+
+UPDATE categories SET color = CASE name
+  WHEN 'Moradia'             THEN '#dc2626'
+  WHEN 'Alimentação'         THEN '#ea580c'
+  WHEN 'Transporte'          THEN '#ca8a04'
+  WHEN 'Saúde'               THEN '#0891b2'
+  WHEN 'Educação'            THEN '#2563eb'
+  WHEN 'Lazer'               THEN '#db2777'
+  WHEN 'Vestuário'           THEN '#9333ea'
+  WHEN 'Presente'            THEN '#e11d48'
+  WHEN 'Pet'                 THEN '#f59e0b'
+  WHEN 'Assinaturas'         THEN '#475569'
+  WHEN 'Cartão de Crédito'   THEN '#c026d3'
+  WHEN 'Investimento'        THEN '#4f46e5'
+  WHEN 'Outros'              THEN '#6b7280'
+  ELSE color
+END WHERE type = 'expense' AND is_default = TRUE;
+
+UPDATE categories SET color = CASE name
+  WHEN 'Renda Fixa'            THEN '#0284c7'
+  WHEN 'Renda Variável'        THEN '#7c3aed'
+  WHEN 'Fundos Imobiliários'   THEN '#be185d'
+  WHEN 'Criptomoedas'          THEN '#f97316'
+  ELSE color
+END WHERE type = 'investment' AND is_default = TRUE;
 
 
 -- =============================================================================
