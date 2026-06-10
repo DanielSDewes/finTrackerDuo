@@ -1250,22 +1250,39 @@ CREATE TRIGGER trg_investment_dividends_sync
 --   - anon_security_definer_function_executable
 --   - authenticated_security_definer_function_executable
 
--- Triggers internos: ninguém invoca via RPC.
-REVOKE EXECUTE ON FUNCTION public.handle_updated_at()           FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.handle_new_user()             FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.set_goal_subgoals_timestamps() FROM PUBLIC, anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.sync_investment_dividends()   FROM PUBLIC, anon, authenticated;
+-- to_regprocedure() retorna NULL se a função não existir, então o bloco roda
+-- mesmo em bancos parciais sem levantar 42883 (function does not exist).
+DO $$
+DECLARE
+  trigger_funcs TEXT[] := ARRAY[
+    'public.handle_updated_at()',
+    'public.handle_new_user()',
+    'public.set_goal_subgoals_timestamps()',
+    'public.sync_investment_dividends()'
+  ];
+  app_rpcs TEXT[] := ARRAY[
+    'public.soft_delete_transaction(uuid)',
+    'public.soft_delete_partner_transaction(uuid)',
+    'public.soft_delete_card_transaction(uuid)',
+    'public.soft_delete_card_installment_group(uuid)',
+    'public.accrue_investment_yields()'
+  ];
+  sig TEXT;
+BEGIN
+  -- Triggers internos: ninguém invoca via RPC.
+  FOREACH sig IN ARRAY trigger_funcs LOOP
+    IF to_regprocedure(sig) IS NOT NULL THEN
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', sig);
+    END IF;
+  END LOOP;
 
--- RPCs do app: só authenticated. PUBLIC/anon ficam bloqueados.
-REVOKE EXECUTE ON FUNCTION public.soft_delete_transaction(UUID)                    FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.soft_delete_partner_transaction(UUID)            FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.soft_delete_card_transaction(UUID)               FROM PUBLIC, anon;
-REVOKE EXECUTE ON FUNCTION public.soft_delete_card_installment_group(UUID)         FROM PUBLIC, anon;
-
--- accrue_investment_yields() roda via pg_cron, mas o GRANT TO authenticated
--- também permite chamada manual em ambiente local. Mantemos o grant e só
--- tiramos PUBLIC/anon por garantia.
-REVOKE EXECUTE ON FUNCTION public.accrue_investment_yields()    FROM PUBLIC, anon;
+  -- RPCs do app: só authenticated. PUBLIC/anon ficam bloqueados.
+  FOREACH sig IN ARRAY app_rpcs LOOP
+    IF to_regprocedure(sig) IS NOT NULL THEN
+      EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon', sig);
+    END IF;
+  END LOOP;
+END $$;
 
 
 -- =============================================================================
