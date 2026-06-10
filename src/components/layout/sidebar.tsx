@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, ArrowLeftRight, TrendingUp, Target, BarChart3,
   Settings, Heart, ChevronLeft, ChevronRight, LogOut,
-  X, CreditCard, CalendarDays,
+  X, CreditCard, CalendarDays, HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui.store";
@@ -189,7 +189,10 @@ export function Sidebar() {
         {/* Bottom - User + Settings */}
         <div className="p-2 space-y-1">
           <TooltipProvider delayDuration={0}>
-            {[{ href: "/settings", icon: Settings, label: "Configurações" }].map((item) => {
+            {[
+              { href: "/help", icon: HelpCircle, label: "Ajuda" },
+              { href: "/settings", icon: Settings, label: "Configurações" },
+            ].map((item) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
               const content = (
                 <Link
