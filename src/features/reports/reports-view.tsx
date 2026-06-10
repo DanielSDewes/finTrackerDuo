@@ -1,15 +1,17 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import { CreditCard } from "lucide-react";
 import {
-  BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
 } from "recharts";
 import { useUIStore } from "@/stores/ui.store";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
+import { cardsService } from "@/features/cards/services/cards.service";
 import { investmentsService } from "@/services/investments.service";
-import { formatCurrency, formatMonth, CHART_COLORS } from "@/lib/utils";
+import { formatCurrency, formatMonth } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -50,6 +52,22 @@ export function ReportsView() {
     queryFn: () => investmentsService.getPortfolioSummary(user!.id, couple?.id, isShared),
     enabled: !!user,
   });
+
+  // 12 meses agregados de gasto no cartão por categoria. A key inclui o
+  // scopeKey pra refetchar ao alternar individual/casal e o número fixo de
+  // meses para invalidação previsível.
+  const { data: cardYearBreakdown = [], isLoading: cardYearLoading } = useQuery({
+    queryKey: ["cards", "category-breakdown-period", scopeKey, 12],
+    queryFn: () =>
+      cardsService.getCardCategoryBreakdownPeriod(
+        user!.id,
+        couple?.id ?? null,
+        12,
+        isShared,
+      ),
+    enabled: !!user,
+  });
+  const cardYearTotal = cardYearBreakdown.reduce((s, c) => s + c.value, 0);
 
   const cashFlowChart = cashFlow?.map((d) => ({
     ...d,
@@ -214,31 +232,70 @@ export function ReportsView() {
           </Tabs>
         </div>
 
-        {/* Savings rate chart */}
+        {/* Cartão — gastos por categoria nos últimos 12 meses */}
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Taxa de Poupança — 12 Meses</CardTitle>
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-primary" />
+                Gastos no Cartão por Categoria — 12 Meses
+              </CardTitle>
+              {!cardYearLoading && cardYearTotal > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs text-muted-foreground uppercase tracking-wide">
+                    Total
+                  </span>
+                  <span className="font-bold text-expense tabular-nums">
+                    {formatCurrency(cardYearTotal)}
+                  </span>
+                </div>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={cashFlowChart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip
-                  contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 12 }}
-                  formatter={(v) => [formatCurrency(Number(v)), "Economia"]}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="balance"
-                  stroke="hsl(var(--primary))"
-                  strokeWidth={2.5}
-                  dot={{ r: 3, fill: "hsl(var(--primary))" }}
-                  activeDot={{ r: 5 }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
+            {cardYearLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : cardYearBreakdown.length === 0 ? (
+              <p className="text-center text-muted-foreground text-sm py-8">
+                Sem gastos no cartão neste período.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {cardYearBreakdown.map((cat) => {
+                  const pct = cardYearTotal > 0
+                    ? (cat.value / cardYearTotal) * 100
+                    : 0;
+                  return (
+                    <div key={cat.name}>
+                      <div className="flex items-center justify-between text-sm mb-1">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className="w-2.5 h-2.5 rounded-full shrink-0"
+                            style={{ backgroundColor: cat.color }}
+                          />
+                          <span className="truncate">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 text-muted-foreground shrink-0">
+                          <span className="tabular-nums">{formatCurrency(cat.value)}</span>
+                          <span className="text-xs w-10 text-right tabular-nums">
+                            {pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+                      <div className="h-2 bg-muted rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all duration-700"
+                          style={{
+                            width: `${pct}%`,
+                            backgroundColor: cat.color,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

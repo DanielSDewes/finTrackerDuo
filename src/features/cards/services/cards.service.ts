@@ -756,6 +756,49 @@ export const cardsService = {
   },
 
   /**
+   * Agrega o breakdown por categoria de cartão para uma janela de N meses
+   * (default 12) anterior + atual. Usado pelo relatório comparativo.
+   *
+   * Estratégia: dispara N chamadas de getCardCategoryBreakdown em paralelo
+   * e funde os resultados por categoria. Isso evita malabarismo com OR
+   * em colunas JOINed e mantém a lógica em um lugar só.
+   */
+  async getCardCategoryBreakdownPeriod(
+    userId: string,
+    coupleId: string | null,
+    months = 12,
+    isShared = false,
+  ) {
+    // Mais antigo primeiro pra estabilidade ao serializar.
+    const monthYears: Array<[number, number]> = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      monthYears.push([d.getMonth() + 1, d.getFullYear()]);
+    }
+
+    const monthlyResults = await Promise.all(
+      monthYears.map(([m, y]) =>
+        this.getCardCategoryBreakdown(userId, coupleId, m, y, isShared),
+      ),
+    );
+
+    const aggregated = new Map<string, { name: string; value: number; color: string }>();
+    for (const monthResult of monthlyResults) {
+      for (const cat of monthResult) {
+        const existing = aggregated.get(cat.name);
+        if (existing) {
+          existing.value += cat.value;
+        } else {
+          aggregated.set(cat.name, { ...cat });
+        }
+      }
+    }
+
+    return Array.from(aggregated.values()).sort((a, b) => b.value - a.value);
+  },
+
+  /**
    * Expense de cartão por mês para os últimos `months` meses.
    * - Individual: soma da minha parte (owner_amount ou partner_amount).
    * - Casal: soma do total da fatura de cada cartão visível.

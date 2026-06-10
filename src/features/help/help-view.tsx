@@ -533,7 +533,7 @@ const SECTIONS: Section[] = [
     id: "relatorios",
     title: "Relatórios",
     icon: BarChart3,
-    keywords: ["análise", "comparativo", "tendência", "breakdown"],
+    keywords: ["análise", "comparativo", "tendência", "breakdown", "cartão", "categoria"],
     body: (
       <>
         <Lead>
@@ -541,9 +541,24 @@ const SECTIONS: Section[] = [
         </Lead>
         <Bullets
           items={[
-            <>Comparativos entre meses.</>,
-            <>Breakdown por categoria/conta.</>,
-            <>Tendências de receita vs. despesa ao longo do tempo.</>,
+            <>
+              <Term>Últimos 12 meses</Term> — cards de total recebido, total
+              gasto e economia média/mês.
+            </>,
+            <>
+              <Term>Fluxo de Caixa</Term> — receitas vs. despesas por mês em
+              barras lado a lado, dos últimos 12 meses.
+            </>,
+            <>
+              <Term>Análise por Categoria</Term> — breakdown do mês
+              selecionado (escolha via MonthSelector), com tabs Despesas/
+              Receitas.
+            </>,
+            <>
+              <Term>Gastos no Cartão por Categoria — 12 Meses</Term> —
+              consolidado de cartões dos últimos 12 meses, com total no
+              cabeçalho e % de participação por categoria.
+            </>,
           ]}
         />
         <Tip>
