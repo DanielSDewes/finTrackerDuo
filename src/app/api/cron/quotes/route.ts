@@ -24,10 +24,16 @@ type HgQuotationsResponse = {
 const SUPPORTED = ["USD", "EUR"] as const;
 
 /**
- * Endpoint chamado pelo Vercel Cron a cada 10 minutos. Busca cotação USD/EUR
- * → BRL na HG Brasil e faz upsert na tabela `currency_quotes`. Clientes leem
- * dessa tabela direto pelo Supabase, então quantos usuários acessem a tela
- * de Investimentos não importa: a HG é chamada uma única vez por janela.
+ * Endpoint chamado pelo Vercel Cron uma vez por dia (12:00 UTC = 09:00 BRT).
+ * Busca cotação USD/EUR → BRL na HG Brasil e faz upsert na tabela
+ * `currency_quotes`. Clientes leem dessa tabela direto pelo Supabase, então
+ * quantos usuários acessem a tela de Investimentos não importa: a HG é
+ * chamada uma única vez por dia.
+ *
+ * Limitação atual: o plano Hobby da Vercel só aceita uma execução diária
+ * por cron. Caso a conta seja promovida pra Pro, o schedule no vercel.json
+ * pode voltar para algo mais frequente (ex.: a cada 10 min) sem outras
+ * mudanças aqui.
  *
  * Proteção: header `Authorization: Bearer <CRON_SECRET>`. O Vercel Cron
  * envia automaticamente esse header quando a env var `CRON_SECRET` está

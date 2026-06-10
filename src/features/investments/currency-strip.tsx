@@ -16,10 +16,11 @@ export function CurrencyStrip() {
   const { data = [], isLoading, isError } = useQuery({
     queryKey: ["quotes", "currencies"],
     queryFn: () => quotesService.getCurrencies(),
-    // O cron atualiza a tabela a cada 10 min. Espelhamos esse mesmo valor
-    // no staleTime para evitar re-fetch desnecessário do Supabase enquanto
-    // o usuário navega.
-    staleTime: 10 * 60 * 1000,
+    // O cron atualiza a tabela uma vez por dia (limitação do plano Hobby
+    // da Vercel). 1 hora de staleTime é mais do que suficiente para evitar
+    // re-fetches do Supabase enquanto o usuário navega, sem deixar a UI
+    // engessada caso a cotação mude e o usuário continue logado.
+    staleTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
   });
 
