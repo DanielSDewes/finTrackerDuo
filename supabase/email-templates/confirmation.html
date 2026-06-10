@@ -1,0 +1,442 @@
+<!--
+  FinTrackerDuo — Email de confirmação de cadastro
+
+  Onde colar: Supabase → Authentication → Email Templates → "Confirm signup".
+  As variáveis usadas são as padrões do Supabase (Go templates):
+    {{ .ConfirmationURL }}  → link mágico de confirmação
+    {{ .Email }}            → endereço sendo confirmado
+
+  Observações de email HTML:
+  - Tudo em tabelas + inline styles porque clientes (Gmail/Outlook) ignoram
+    classes e a maior parte do CSS moderno.
+  - Logo renderizada com CSS (badge "FD" com gradiente) para não depender
+    de imagem externa — assim funciona em qualquer cliente, com qualquer
+    política de bloqueio de imagens.
+  - Texto curto, CTA grande, fallback do link em texto puro.
+-->
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="supported-color-schemes" content="light dark" />
+    <title>Confirme seu email — FinTrackerDuo</title>
+  </head>
+  <body
+    style="
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f7;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Helvetica Neue', Arial, sans-serif;
+      color: #1a1a1d;
+      -webkit-font-smoothing: antialiased;
+    "
+  >
+    <!-- Preheader (texto que aparece na prévia da caixa de entrada, oculto no corpo) -->
+    <div style="display: none; max-height: 0; overflow: hidden; mso-hide: all;">
+      Falta só um passo para começar a usar o FinTrackerDuo. Confirme seu email
+      em poucos segundos.
+    </div>
+
+    <table
+      role="presentation"
+      width="100%"
+      cellpadding="0"
+      cellspacing="0"
+      border="0"
+      style="background-color: #f4f4f7; padding: 32px 16px;"
+    >
+      <tr>
+        <td align="center">
+          <table
+            role="presentation"
+            width="600"
+            cellpadding="0"
+            cellspacing="0"
+            border="0"
+            style="max-width: 600px; width: 100%;"
+          >
+            <!-- ─── HERO ────────────────────────────────────────────────── -->
+            <tr>
+              <td
+                align="center"
+                style="
+                  background-color: #08090e;
+                  background-image: radial-gradient(
+                    ellipse 80% 80% at 50% -10%,
+                    rgba(124, 58, 237, 0.45) 0%,
+                    transparent 60%
+                  );
+                  padding: 48px 32px 40px;
+                  border-radius: 16px 16px 0 0;
+                "
+              >
+                <!-- Badge "FD" -->
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td
+                      align="center"
+                      valign="middle"
+                      style="
+                        width: 60px;
+                        height: 60px;
+                        background-image: linear-gradient(135deg, #7c3aed 0%, #06b6d4 100%);
+                        background-color: #7c3aed;
+                        border-radius: 16px;
+                        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                        font-size: 24px;
+                        font-weight: 800;
+                        color: #ffffff;
+                        letter-spacing: -1px;
+                        line-height: 60px;
+                      "
+                    >
+                      FD
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Wordmark -->
+                <p
+                  style="
+                    margin: 18px 0 0;
+                    font-size: 14px;
+                    font-weight: 600;
+                    letter-spacing: 1px;
+                    color: rgba(255, 255, 255, 0.55);
+                    text-transform: uppercase;
+                  "
+                >
+                  FinTrackerDuo
+                </p>
+
+                <!-- Heading -->
+                <h1
+                  style="
+                    margin: 24px 0 12px;
+                    font-size: 28px;
+                    line-height: 1.2;
+                    font-weight: 700;
+                    color: #ffffff;
+                  "
+                >
+                  Confirme seu email
+                </h1>
+                <p
+                  style="
+                    margin: 0;
+                    font-size: 15px;
+                    line-height: 1.5;
+                    color: rgba(255, 255, 255, 0.65);
+                    max-width: 380px;
+                  "
+                >
+                  Última etapa para começar a controlar suas finanças —
+                  individualmente ou em casal.
+                </p>
+              </td>
+            </tr>
+
+            <!-- ─── BODY ────────────────────────────────────────────────── -->
+            <tr>
+              <td
+                style="
+                  background-color: #ffffff;
+                  padding: 40px 32px 32px;
+                "
+              >
+                <p
+                  style="
+                    margin: 0 0 16px;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    color: #1a1a1d;
+                  "
+                >
+                  Olá! 👋
+                </p>
+                <p
+                  style="
+                    margin: 0 0 28px;
+                    font-size: 16px;
+                    line-height: 1.6;
+                    color: #444;
+                  "
+                >
+                  Você está prestes a entrar no
+                  <strong style="color: #1a1a1d;">FinTrackerDuo</strong>. Clique no
+                  botão abaixo para confirmar seu endereço de email e ativar a sua
+                  conta.
+                </p>
+
+                <!-- CTA -->
+                <table
+                  role="presentation"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  align="center"
+                  style="margin: 8px auto 28px;"
+                >
+                  <tr>
+                    <td
+                      align="center"
+                      bgcolor="#7c3aed"
+                      style="
+                        background-color: #7c3aed;
+                        background-image: linear-gradient(135deg, #7c3aed 0%, #8b5cf6 100%);
+                        border-radius: 12px;
+                        box-shadow: 0 6px 18px rgba(124, 58, 237, 0.28);
+                      "
+                    >
+                      <a
+                        href="{{ .ConfirmationURL }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style="
+                          display: inline-block;
+                          padding: 14px 36px;
+                          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+                          font-size: 15px;
+                          font-weight: 600;
+                          color: #ffffff;
+                          text-decoration: none;
+                          letter-spacing: 0.2px;
+                        "
+                      >
+                        Confirmar meu email
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Fallback do link -->
+                <p
+                  style="
+                    margin: 0 0 8px;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    color: #888;
+                    text-align: center;
+                  "
+                >
+                  Botão não funcionou? Cole este link no seu navegador:
+                </p>
+                <p
+                  style="
+                    margin: 0 0 28px;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    color: #7c3aed;
+                    text-align: center;
+                    word-break: break-all;
+                  "
+                >
+                  <a
+                    href="{{ .ConfirmationURL }}"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style="color: #7c3aed; text-decoration: underline;"
+                    >{{ .ConfirmationURL }}</a
+                  >
+                </p>
+
+                <!-- Divisor -->
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                  style="margin: 8px 0 24px;"
+                >
+                  <tr>
+                    <td
+                      style="
+                        border-top: 1px solid #ececf0;
+                        font-size: 0;
+                        line-height: 0;
+                      "
+                    >
+                      &nbsp;
+                    </td>
+                  </tr>
+                </table>
+
+                <!-- Mini destaques do app -->
+                <p
+                  style="
+                    margin: 0 0 16px;
+                    font-size: 13px;
+                    font-weight: 600;
+                    color: #1a1a1d;
+                    letter-spacing: 0.3px;
+                    text-transform: uppercase;
+                  "
+                >
+                  O que te espera
+                </p>
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                >
+                  <tr>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="padding: 0 8px 16px 0; vertical-align: top;"
+                    >
+                      <p
+                        style="
+                          margin: 0 0 4px;
+                          font-size: 20px;
+                          line-height: 1;
+                        "
+                      >
+                        💸
+                      </p>
+                      <p
+                        style="
+                          margin: 0;
+                          font-size: 13px;
+                          line-height: 1.5;
+                          color: #444;
+                        "
+                      >
+                        Receitas e despesas com categorias e parceiros.
+                      </p>
+                    </td>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="padding: 0 8px 16px; vertical-align: top;"
+                    >
+                      <p
+                        style="
+                          margin: 0 0 4px;
+                          font-size: 20px;
+                          line-height: 1;
+                        "
+                      >
+                        💳
+                      </p>
+                      <p
+                        style="
+                          margin: 0;
+                          font-size: 13px;
+                          line-height: 1.5;
+                          color: #444;
+                        "
+                      >
+                        Faturas de cartão com parcelas, recorrências e previsões.
+                      </p>
+                    </td>
+                    <td
+                      width="33%"
+                      valign="top"
+                      style="padding: 0 0 16px 8px; vertical-align: top;"
+                    >
+                      <p
+                        style="
+                          margin: 0 0 4px;
+                          font-size: 20px;
+                          line-height: 1;
+                        "
+                      >
+                        💞
+                      </p>
+                      <p
+                        style="
+                          margin: 0;
+                          font-size: 13px;
+                          line-height: 1.5;
+                          color: #444;
+                        "
+                      >
+                        Modo casal para dividir despesas e ver tudo em conjunto.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- ─── FOOTER ──────────────────────────────────────────────── -->
+            <tr>
+              <td
+                style="
+                  background-color: #ffffff;
+                  padding: 0 32px 36px;
+                  border-radius: 0 0 16px 16px;
+                "
+              >
+                <table
+                  role="presentation"
+                  width="100%"
+                  cellpadding="0"
+                  cellspacing="0"
+                  border="0"
+                >
+                  <tr>
+                    <td
+                      style="
+                        border-top: 1px solid #ececf0;
+                        padding-top: 20px;
+                      "
+                    >
+                      <p
+                        style="
+                          margin: 0 0 8px;
+                          font-size: 12px;
+                          line-height: 1.6;
+                          color: #888;
+                        "
+                      >
+                        Você está recebendo este email porque uma conta foi criada
+                        no FinTrackerDuo usando
+                        <strong style="color: #555;">{{ .Email }}</strong>. Se não
+                        foi você, pode ignorar — nada será ativado sem a
+                        confirmação.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Tagline / copyright fora do card -->
+            <tr>
+              <td align="center" style="padding: 24px 16px 0;">
+                <p
+                  style="
+                    margin: 0 0 4px;
+                    font-size: 12px;
+                    line-height: 1.5;
+                    color: #999;
+                  "
+                >
+                  Controle suas finanças juntos.
+                </p>
+                <p
+                  style="
+                    margin: 0;
+                    font-size: 11px;
+                    line-height: 1.5;
+                    color: #b3b3b8;
+                  "
+                >
+                  © FinTrackerDuo. Todos os direitos reservados.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>
