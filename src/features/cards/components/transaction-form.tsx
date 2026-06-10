@@ -130,9 +130,12 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
     onSuccess: () => onSuccess?.(),
   });
 
-  const perInstallment =
+  // Agora o usuário informa o valor de CADA parcela. O total da compra é
+  // calculado multiplicando por installment_total — exibido só como hint
+  // para conferência.
+  const installmentTotalValue =
     isInstallment && installmentTotal > 1 && amount
-      ? +(amount / installmentTotal).toFixed(2)
+      ? +(amount * installmentTotal).toFixed(2)
       : null;
 
   return (
@@ -149,9 +152,14 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
         {errors.title && <p className="text-xs text-destructive">{errors.title.message}</p>}
       </div>
 
-      {/* Amount */}
+      {/* Amount — quando o lançamento é parcelado, este campo representa o
+          valor de UMA parcela; o total da compra é multiplicado por
+          installment_total na confirmação. Em compras à vista, é o valor
+          cheio mesmo. */}
       <div className="space-y-2">
-        <Label htmlFor="amount">Valor (R$)</Label>
+        <Label htmlFor="amount">
+          {isInstallment ? "Valor por parcela (R$)" : "Valor (R$)"}
+        </Label>
         <Input
           id="amount"
           type="number"
@@ -161,11 +169,10 @@ export function CardTransactionForm({ cardId, billMonth, billYear, onSuccess }: 
           {...register("amount")}
         />
         {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-        {perInstallment && (
+        {installmentTotalValue && (
           <p className="text-xs text-muted-foreground">
-            ≈{" "}
-            {formatCurrency(perInstallment)}{" "}
-            por parcela
+            Total da compra ≈ {formatCurrency(installmentTotalValue)} em{" "}
+            {installmentTotal}x
           </p>
         )}
       </div>

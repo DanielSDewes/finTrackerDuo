@@ -37,6 +37,7 @@ export function BillDetail() {
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
+  const [filterMode, setFilterMode] = useState<"all" | "forecast" | "installment">("all");
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CreditCardTransaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -125,9 +126,19 @@ export function BillDetail() {
     );
   }
 
-  const filtered = transactions.filter((t) =>
-    t.title.toLowerCase().includes(search.toLowerCase())
-  );
+  // Filtros aplicados em sequência: primeiro o modo (todos / só previsões /
+  // só parcelados) e depois a busca textual no título.
+  const filtered = transactions
+    .filter((t) => {
+      if (filterMode === "forecast") return t.is_forecast;
+      if (filterMode === "installment") return t.is_installment;
+      return true;
+    })
+    .filter((t) => t.title.toLowerCase().includes(search.toLowerCase()));
+
+  // Contagens auxiliares para mostrar nos chips do filtro.
+  const forecastCount = transactions.filter((t) => t.is_forecast).length;
+  const installmentCount = transactions.filter((t) => t.is_installment).length;
 
   const total = transactions
     .filter((t) => !t.is_reimbursed)
@@ -218,6 +229,43 @@ export function BillDetail() {
           />
         </div>
 
+        {/* Filtros: Todos / Só previsões / Só parcelados. Aparecem só quando
+            há pelo menos um lançamento dos dois tipos na fatura. */}
+        {(forecastCount > 0 || installmentCount > 0) && (
+          <div className="flex gap-1 text-[11px]">
+            <FilterChip
+              label="Todos"
+              count={transactions.length}
+              active={filterMode === "all"}
+              onClick={() => setFilterMode("all")}
+            />
+            {forecastCount > 0 && (
+              <FilterChip
+                icon={<Clock className="w-2.5 h-2.5" />}
+                label="Previsão"
+                count={forecastCount}
+                active={filterMode === "forecast"}
+                tone="orange"
+                onClick={() =>
+                  setFilterMode(filterMode === "forecast" ? "all" : "forecast")
+                }
+              />
+            )}
+            {installmentCount > 0 && (
+              <FilterChip
+                icon={<Layers className="w-2.5 h-2.5" />}
+                label="Parceladas"
+                count={installmentCount}
+                active={filterMode === "installment"}
+                tone="primary"
+                onClick={() =>
+                  setFilterMode(filterMode === "installment" ? "all" : "installment")
+                }
+              />
+            )}
+          </div>
+        )}
+
         {isBillLocked && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
             <Lock className="w-3 h-3 shrink-0" />
@@ -239,12 +287,28 @@ export function BillDetail() {
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-40 gap-2 text-center">
             <p className="text-sm text-muted-foreground">
-              {search ? "Nenhum resultado encontrado" : "Nenhum lançamento nesta fatura"}
+              {search
+                ? "Nenhum resultado encontrado"
+                : filterMode === "forecast"
+                ? "Nenhuma previsão nesta fatura"
+                : filterMode === "installment"
+                ? "Nenhuma parcela nesta fatura"
+                : "Nenhum lançamento nesta fatura"}
             </p>
-            {!search && !isBillLocked && (
+            {!search && filterMode === "all" && !isBillLocked && (
               <Button size="sm" variant="outline" onClick={() => setFormOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" />
                 Adicionar lançamento
+              </Button>
+            )}
+            {filterMode !== "all" && (
+              <Button
+                size="sm"
+                variant="ghost"
+                className="text-xs h-7"
+                onClick={() => setFilterMode("all")}
+              >
+                Limpar filtro
               </Button>
             )}
           </div>
@@ -330,6 +394,48 @@ export function BillDetail() {
         }}
       />
     </div>
+  );
+}
+
+// Chip de filtro de uma linha só — comportamento de "toggle exclusivo".
+// Clicar no chip ativo desmarca (volta pra "Todos"); clicar em outro troca.
+function FilterChip({
+  label,
+  count,
+  active,
+  onClick,
+  icon,
+  tone,
+}: {
+  label: string;
+  count: number;
+  active: boolean;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  tone?: "orange" | "primary";
+}) {
+  const toneActive =
+    tone === "orange"
+      ? "bg-orange-400/15 text-orange-400 border-orange-400/30"
+      : tone === "primary"
+      ? "bg-primary/15 text-primary border-primary/30"
+      : "bg-muted text-foreground border-border";
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-1 px-2 py-1 rounded-md border transition-colors",
+        active
+          ? toneActive + " font-semibold"
+          : "bg-muted/40 text-muted-foreground border-transparent hover:bg-muted",
+      )}
+    >
+      {icon}
+      {label}
+      <span className="opacity-60">({count})</span>
+    </button>
   );
 }
 

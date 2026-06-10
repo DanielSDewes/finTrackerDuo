@@ -409,7 +409,10 @@ export const cardsService = {
 
     if (is_installment && installment_total > 1) {
       const installmentGroupId = crypto.randomUUID();
-      const perAmount = +(input.amount / installment_total).toFixed(2);
+      // `input.amount` é o valor de cada parcela (mudança de semântica em
+      // 2026-06: antes era o total e dividíamos). Cada parcela recebe esse
+      // valor cheio; o total da compra fica implícito como amount * total.
+      const perAmount = +input.amount.toFixed(2);
       const billsUpdated = new Set<string>();
 
       // Índice absoluto do mês da primeira parcela.
@@ -518,8 +521,9 @@ export const cardsService = {
 
     if (is_installment && installment_total > 1) {
       const installmentGroupId = crypto.randomUUID();
-      const perInstallment = +(input.amount / installment_total).toFixed(2);
-      const half = +(perInstallment / 2).toFixed(2);
+      // `input.amount` é o valor de cada parcela (semântica nova). No split,
+      // cada parceiro paga metade dessa parcela por mês.
+      const half = +(input.amount / 2).toFixed(2);
       const billsUpdated = new Set<string>();
 
       let firstYear = billYear;
