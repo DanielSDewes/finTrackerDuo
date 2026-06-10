@@ -238,6 +238,15 @@ const SECTIONS: Section[] = [
               faltam — assim a série continua sem ação manual.
             </>,
             <>
+              <Term>Editar propaga para frente.</Term> Mudar valor, descrição,
+              categoria, conta ou observações de uma instância recorrente
+              atualiza também todas as cópias dos meses futuros da mesma
+              série. <em>Data e status ficam por instância</em> (cada mês
+              pode ter sua pequena variação sem mexer no resto). Esse
+              comportamento difere do cartão, onde a edição é restrita à
+              parcela tocada.
+            </>,
+            <>
               Todas as cópias compartilham um{" "}
               <Term>recurring_group_id</Term> interno usado pra deduplicar e
               evitar criar a mesma recorrente duas vezes no mesmo mês.

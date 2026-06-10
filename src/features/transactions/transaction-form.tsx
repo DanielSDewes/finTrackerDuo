@@ -69,7 +69,28 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
 
   const mutation = useToastMutation({
     mutationFn: async (data: TransactionInput) => {
-      const payload = {
+      if (transaction?.id) {
+        // Em edição, NÃO sobrescrevemos os campos da série recorrente
+        // (is_recurring, recurring_group_id, recurrence_type). Eles ficam
+        // sob controle do banco — caso contrário cada edição apagaria o
+        // vínculo da série e a propagação pra frente deixaria de funcionar.
+        const updatePayload = {
+          type: data.type,
+          amount: data.amount,
+          description: data.description,
+          notes: data.notes,
+          date: data.date,
+          category_id: data.category_id,
+          account_id: data.account_id,
+          status: data.status,
+          tags: data.tags,
+          user_id: targetUserId,
+          couple_id: couple?.id ?? null,
+        };
+        return transactionsService.updateTransaction(transaction.id, updatePayload);
+      }
+
+      const createPayload = {
         ...data,
         user_id: targetUserId,
         couple_id: couple?.id ?? null,
@@ -81,12 +102,8 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         recurrence_end_date: null,
         recurring_group_id: null,
       };
-
-      if (transaction?.id) {
-        return transactionsService.updateTransaction(transaction.id, payload);
-      }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return transactionsService.createTransactionWithRecurrence(payload as any);
+      return transactionsService.createTransactionWithRecurrence(createPayload as any);
     },
     invalidateKeys: [
       ["transactions"],
@@ -234,8 +251,9 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         </div>
         {!!transaction?.id && isRecurring && (
           <p className="text-[11px] text-muted-foreground">
-            Editar uma transação não recria as cópias futuras — para mudar a
-            série, remova as instâncias e crie de novo.
+            Editar valor, descrição, categoria, conta ou observações dessa
+            transação <span className="font-semibold">atualiza também</span>{" "}
+            as cópias dos meses futuros. Data e status ficam por instância.
           </p>
         )}
       </div>

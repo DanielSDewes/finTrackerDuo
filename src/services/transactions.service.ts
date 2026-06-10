@@ -253,6 +253,16 @@ export const transactionsService = {
 
   async updateTransaction(id: string, updates: Partial<Transaction>) {
     const supabase = createClient();
+
+    // Snapshot da tx antes do update — precisamos saber se ela é parte de
+    // uma série recorrente para então propagar a alteração às cópias
+    // futuras (mesmo recurring_group_id, date > cutoff).
+    const { data: before } = await supabase
+      .from("transactions")
+      .select("recurring_group_id, date")
+      .eq("id", id)
+      .maybeSingle();
+
     const { data, error } = await supabase
       .from("transactions")
       .update(updates)
@@ -260,6 +270,43 @@ export const transactionsService = {
       .select("*, category:categories(*), account:accounts(*)")
       .single();
     if (error) throw error;
+
+    const groupId = before?.recurring_group_id ?? null;
+    const cutoffDate = before?.date ?? null;
+
+    // Decisão de projeto: edição em transação avulsa de cartão fica
+    // restrita à parcela editada, mas em transação comum recorrente a
+    // edição propaga pra frente. Justificativa: na maioria dos casos a
+    // pessoa editou porque o valor/categoria/descrição mudaram pra valer
+    // (ex.: reajuste da mensalidade do aluguel), e atualizar uma a uma
+    // os 5 meses seguintes é tedioso. Campos por instância (date e
+    // status) são preservados.
+    if (groupId && cutoffDate) {
+      const propagatable: Partial<Transaction> = {};
+      if ("amount" in updates) propagatable.amount = updates.amount;
+      if ("description" in updates) propagatable.description = updates.description;
+      if ("notes" in updates) propagatable.notes = updates.notes;
+      if ("category_id" in updates) propagatable.category_id = updates.category_id;
+      if ("account_id" in updates) propagatable.account_id = updates.account_id;
+      if ("type" in updates) propagatable.type = updates.type;
+
+      if (Object.keys(propagatable).length > 0) {
+        try {
+          await supabase
+            .from("transactions")
+            .update(propagatable)
+            .eq("recurring_group_id", groupId)
+            .gt("date", cutoffDate)
+            .is("deleted_at", null);
+        } catch (e) {
+          console.warn(
+            "Falha ao propagar edição de transação recorrente:",
+            e,
+          );
+        }
+      }
+    }
+
     return data as Transaction;
   },
 
