@@ -378,13 +378,18 @@ CREATE INDEX idx_cct_deleted_at                 ON credit_card_transactions(dele
 -- =============================================================================
 
 -- ---- updated_at genérico ----
+-- SET search_path explícito + REVOKE no fim do schema fecham o vetor de
+-- "function search_path mutable" do linter de segurança do Supabase.
 CREATE OR REPLACE FUNCTION handle_updated_at()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE TRIGGER trg_profiles_updated_at
   BEFORE UPDATE ON profiles
@@ -475,7 +480,10 @@ CREATE TRIGGER on_auth_user_created
 
 -- ---- goal_subgoals: mantém completed_at em sincronia com completed ----
 CREATE OR REPLACE FUNCTION set_goal_subgoals_timestamps()
-RETURNS TRIGGER AS $$
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SET search_path = public
+AS $$
 BEGIN
   NEW.updated_at = NOW();
   IF NEW.completed = TRUE AND (OLD.completed IS NULL OR OLD.completed = FALSE) THEN
@@ -485,7 +493,7 @@ BEGIN
   END IF;
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql;
+$$;
 
 CREATE TRIGGER trg_goal_subgoals_timestamps
   BEFORE UPDATE ON goal_subgoals
@@ -1218,6 +1226,46 @@ $$;
 CREATE TRIGGER trg_investment_dividends_sync
   AFTER INSERT OR UPDATE OR DELETE ON investment_dividends
   FOR EACH ROW EXECUTE FUNCTION sync_investment_dividends();
+
+
+-- =============================================================================
+-- 7.1. HARDENING — REVOKE de funções na superfície PostgREST
+-- =============================================================================
+-- Por padrão o Postgres concede EXECUTE em funções para PUBLIC, e o PostgREST
+-- do Supabase expõe automaticamente tudo que esteja no schema `public` como
+-- RPC em `/rest/v1/rpc/<nome>`. Sem REVOKE explícito, isso significa que:
+--
+-- 1) Triggers internos (handle_new_user, handle_updated_at, sync_investment_
+--    dividends, set_goal_subgoals_timestamps) ficam chamáveis via REST por
+--    qualquer um, anônimo ou autenticado. Eles foram desenhados para rodar
+--    no contexto de triggers, não como RPC pública — chamá-los direto pode
+--    inserir/alterar dados sem passar pelos checks normais.
+--
+-- 2) RPCs do app (soft_delete_*) tinham GRANT TO authenticated mas o EXECUTE
+--    pra PUBLIC continuava aberto, ou seja, o token anon também conseguia
+--    invocar. As funções têm checagem interna por auth.uid(), mas a defesa
+--    em profundidade pede REVOKE em PUBLIC.
+--
+-- Esses REVOKE/GRANT fecham os warnings do security advisor:
+--   - anon_security_definer_function_executable
+--   - authenticated_security_definer_function_executable
+
+-- Triggers internos: ninguém invoca via RPC.
+REVOKE EXECUTE ON FUNCTION public.handle_updated_at()           FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.handle_new_user()             FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.set_goal_subgoals_timestamps() FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.sync_investment_dividends()   FROM PUBLIC, anon, authenticated;
+
+-- RPCs do app: só authenticated. PUBLIC/anon ficam bloqueados.
+REVOKE EXECUTE ON FUNCTION public.soft_delete_transaction(UUID)                    FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.soft_delete_partner_transaction(UUID)            FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.soft_delete_card_transaction(UUID)               FROM PUBLIC, anon;
+REVOKE EXECUTE ON FUNCTION public.soft_delete_card_installment_group(UUID)         FROM PUBLIC, anon;
+
+-- accrue_investment_yields() roda via pg_cron, mas o GRANT TO authenticated
+-- também permite chamada manual em ambiente local. Mantemos o grant e só
+-- tiramos PUBLIC/anon por garantia.
+REVOKE EXECUTE ON FUNCTION public.accrue_investment_yields()    FROM PUBLIC, anon;
 
 
 -- =============================================================================
