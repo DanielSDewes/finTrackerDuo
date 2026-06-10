@@ -9,7 +9,6 @@ import {
   CalendarDays,
   TrendingUp,
   Target,
-  BarChart3,
   Heart,
   Settings,
   HelpCircle,
@@ -142,15 +141,22 @@ const SECTIONS: Section[] = [
       "entradas",
       "saídas",
       "totais",
+      "análise",
+      "categoria",
+      "12 meses",
+      "relatório",
+      "comparativo",
     ],
     body: (
       <>
         <Lead>
-          Visão financeira do mês selecionado. Use o carrossel de meses no topo
-          pra navegar; o restante da tela reflete o mês ativo.
+          Visão financeira completa em uma tela só. Use o carrossel de meses
+          no topo pra navegar; os blocos que dependem do mês selecionado
+          reagem instantaneamente, e os blocos de 12 meses ficam fixos
+          olhando pra janela inteira do ano.
         </Lead>
 
-        <Subtitle>Cards de Receitas, Despesas e Saldo</Subtitle>
+        <Subtitle>Bloco 1 — Mês selecionado</Subtitle>
         <Bullets
           items={[
             <>
@@ -166,34 +172,58 @@ const SECTIONS: Section[] = [
               <Term>Saldo do Mês</Term> — Receitas − Despesas. Cor primary
               quando positivo; expense quando negativo.
             </>,
+            <>
+              <Term>Gastos por Categoria</Term> e{" "}
+              <Term>Cartão por categoria</Term> — pizzas com as principais 8
+              categorias. Cores vêm da categoria.
+            </>,
+            <>
+              <Term>Fluxo de caixa (6 meses)</Term> — barras de receita vs.
+              despesa (com cartão somado nas despesas).
+            </>,
           ]}
         />
 
-        <Subtitle>Gráficos</Subtitle>
+        <Subtitle>Bloco 2 — Entradas e Saídas listadas</Subtitle>
+        <Lead>
+          Dois cards com até 200 itens do mês selecionado por tipo. Headers
+          mostram contagem + somatório do que está listado. Faturas de cartão
+          aparecem em <Term>Saídas</Term> como linhas clicáveis que levam
+          pra tela de Cartões.
+        </Lead>
+
+        <Subtitle>Bloco 3 — Últimos 12 meses (visão ampla)</Subtitle>
         <Bullets
           items={[
             <>
-              <Term>Gastos por Categoria</Term> — pizza com as principais 8
-              categorias. Tabs Despesas/Receitas. Cores vêm da categoria.
+              <Term>3 stats consolidados</Term> — Total Recebido, Total Gasto
+              e Economia Média/Mês ao longo dos 12 meses.
             </>,
             <>
-              <Term>Cartão por categoria</Term> — pizza específica das compras
-              do mês em cartões de crédito.
-            </>,
-            <>
-              <Term>Fluxo de caixa</Term> — barras dos últimos 6 meses (receita
-              vs. despesa, com cartão somado nas despesas).
+              <Term>Fluxo de Caixa — 12 Meses</Term> — barras de receitas vs.
+              despesas mês a mês pra ver tendência de longo prazo.
             </>,
           ]}
         />
 
-        <Subtitle>Entradas e Saídas listadas</Subtitle>
+        <Subtitle>Bloco 4 — Análise por Categoria (do mês)</Subtitle>
         <Lead>
-          Embaixo, dois cards com até 200 itens por tipo. Headers mostram
-          contagem + somatório do que está listado. Faturas de cartão aparecem
-          em <Term>Saídas</Term> como linhas clicáveis que levam pra tela de
-          Cartões.
+          Barras horizontais com valor e % por categoria, tabs Despesas/
+          Receitas. Mais detalhado que a pizza do bloco 1 — útil pra ver os
+          valores absolutos e percentuais de uma vez só.
         </Lead>
+
+        <Subtitle>Bloco 5 — Gastos no Cartão por Categoria — 12 Meses</Subtitle>
+        <Lead>
+          Consolidado anual de cartões com total no cabeçalho e % de
+          participação por categoria. Ajuda a entender onde o cartão está
+          sendo mais usado no histórico.
+        </Lead>
+
+        <Tip>
+          Todos os blocos respeitam o modo individual/casal selecionado.
+          Alterne no topo da tela quando quiser ver consolidado.
+        </Tip>
       </>
     ),
   },
@@ -526,45 +556,6 @@ const SECTIONS: Section[] = [
             <>Submetas têm sua própria curva de progresso e podem ser marcadas como concluídas.</>,
           ]}
         />
-      </>
-    ),
-  },
-  {
-    id: "relatorios",
-    title: "Relatórios",
-    icon: BarChart3,
-    keywords: ["análise", "comparativo", "tendência", "breakdown", "cartão", "categoria"],
-    body: (
-      <>
-        <Lead>
-          Análises mais profundas dos seus dados, complementando o Dashboard.
-        </Lead>
-        <Bullets
-          items={[
-            <>
-              <Term>Últimos 12 meses</Term> — cards de total recebido, total
-              gasto e economia média/mês.
-            </>,
-            <>
-              <Term>Fluxo de Caixa</Term> — receitas vs. despesas por mês em
-              barras lado a lado, dos últimos 12 meses.
-            </>,
-            <>
-              <Term>Análise por Categoria</Term> — breakdown do mês
-              selecionado (escolha via MonthSelector), com tabs Despesas/
-              Receitas.
-            </>,
-            <>
-              <Term>Gastos no Cartão por Categoria — 12 Meses</Term> —
-              consolidado de cartões dos últimos 12 meses, com total no
-              cabeçalho e % de participação por categoria.
-            </>,
-          ]}
-        />
-        <Tip>
-          Os relatórios respeitam o modo individual/casal selecionado no
-          Dashboard — alterne lá quando quiser ver consolidado.
-        </Tip>
       </>
     ),
   },

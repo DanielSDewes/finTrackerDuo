@@ -5,11 +5,15 @@ import { useQuery } from "@tanstack/react-query";
 import {
   TrendingUp, TrendingDown, ArrowRight, ArrowUpRight, ArrowDownRight, CreditCard,
 } from "lucide-react";
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Legend,
+} from "recharts";
 import { useUIStore } from "@/stores/ui.store";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { cardsService } from "@/features/cards/services/cards.service";
-import { formatCurrency, formatDate, calculateChange } from "@/lib/utils";
+import { formatCurrency, formatDate, formatMonth, calculateChange } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { MonthSelector } from "@/components/shared/month-selector";
 import { CashFlowChart } from "./cash-flow-chart";
@@ -19,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export function DashboardView() {
   const { user, couple, isShared, scopeKey } = useScopeFilter();
@@ -69,6 +74,59 @@ export function DashboardView() {
       cardsService.getCardsSummary(user!.id, couple?.id ?? null, prevMonthNum, prevYear, isShared),
     enabled: !!user,
   });
+
+  // ─── Antigos blocos da tela de Relatórios (movidos pra cá em jun/2026) ──
+  // Fluxo de caixa dos últimos 12 meses (transações comuns; não inclui
+  // cartões — diferente do CashFlowChart 6m que já existe acima).
+  const { data: cashFlow12 = [], isLoading: cashFlow12Loading } = useQuery({
+    queryKey: ["cash-flow", scopeKey, 12],
+    queryFn: () =>
+      transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 12, isShared),
+    enabled: !!user,
+  });
+
+  // Breakdown por categoria do mês selecionado (versão em barras
+  // horizontais; complementa as pizzas que já existem no topo).
+  const { data: expenseBreakdown = [], isLoading: expenseBreakdownLoading } = useQuery({
+    queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "expense"],
+    queryFn: () =>
+      transactionsService.getCategoryBreakdown(
+        user!.id, couple?.id ?? null, selectedMonth, "expense", isShared
+      ),
+    enabled: !!user,
+  });
+
+  const { data: incomeBreakdown = [], isLoading: incomeBreakdownLoading } = useQuery({
+    queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "income"],
+    queryFn: () =>
+      transactionsService.getCategoryBreakdown(
+        user!.id, couple?.id ?? null, selectedMonth, "income", isShared
+      ),
+    enabled: !!user,
+  });
+
+  // Consolidado dos últimos 12 meses de gastos no cartão por categoria.
+  const { data: cardYearBreakdown = [], isLoading: cardYearLoading } = useQuery({
+    queryKey: ["cards", "category-breakdown-period", scopeKey, 12],
+    queryFn: () =>
+      cardsService.getCardCategoryBreakdownPeriod(
+        user!.id, couple?.id ?? null, 12, isShared
+      ),
+    enabled: !!user,
+  });
+
+  // Totalizadores dos 12 meses pra cabeçalho dos cards.
+  const totalIncome12 = cashFlow12.reduce((s, d) => s + d.income, 0);
+  const totalExpense12 = cashFlow12.reduce((s, d) => s + d.expense, 0);
+  const avgSavings12 = cashFlow12.length
+    ? cashFlow12.reduce((s, d) => s + (d.income - d.expense), 0) / cashFlow12.length
+    : 0;
+  const cardYearTotal = cardYearBreakdown.reduce((s, c) => s + c.value, 0);
+
+  const cashFlow12Chart = cashFlow12.map((d) => ({
+    ...d,
+    month: formatMonth(d.month + "-01"),
+  }));
 
   // Lista completa de transações do mês (side-by-side)
   const { data: monthData, isLoading: loadingList } = useQuery({
@@ -447,7 +505,188 @@ export function DashboardView() {
             </CardContent>
           </Card>
         </div>
+
+        {/* ─── Últimos 12 meses ─────────────────────────────────────── */}
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Últimos 12 meses</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+            {[
+              { label: "Total Recebido", value: totalIncome12, color: "text-[hsl(var(--success))]" },
+              { label: "Total Gasto", value: totalExpense12, color: "text-[hsl(var(--expense))]" },
+              {
+                label: "Economia Média/Mês",
+                value: avgSavings12,
+                color: avgSavings12 >= 0 ? "text-[hsl(var(--success))]" : "text-[hsl(var(--expense))]",
+              },
+            ].map((stat) => (
+              <Card key={stat.label}>
+                <CardContent className="p-5">
+                  <p className="text-sm text-[hsl(var(--muted-foreground))] mb-1">{stat.label}</p>
+                  {cashFlow12Loading ? (
+                    <Skeleton className="h-8 w-32" />
+                  ) : (
+                    <p className={`text-2xl font-bold ${stat.color}`}>{formatCurrency(stat.value)}</p>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Fluxo de Caixa — 12 Meses (barras) */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">Fluxo de Caixa — 12 Meses</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {cashFlow12Loading ? (
+                <Skeleton className="h-64 w-full" />
+              ) : (
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={cashFlow12Chart} margin={{ top: 4, right: 4, bottom: 0, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                    <XAxis dataKey="month" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                    <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 12 }}
+                      formatter={(v, n) => [formatCurrency(Number(v)), n === "income" ? "Receitas" : "Despesas"]}
+                    />
+                    <Legend formatter={(v) => v === "income" ? "Receitas" : "Despesas"} wrapperStyle={{ fontSize: 12 }} />
+                    <Bar dataKey="income" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="expense" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* ─── Análise por Categoria (mês selecionado, barras) ───────── */}
+        <div>
+          <h2 className="text-lg font-semibold mb-4">Análise por Categoria</h2>
+          <Tabs defaultValue="expense">
+            <TabsList className="mb-4">
+              <TabsTrigger value="expense">Despesas</TabsTrigger>
+              <TabsTrigger value="income">Receitas</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="expense">
+              {expenseBreakdownLoading ? (
+                <Skeleton className="h-48 w-full" />
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    {expenseBreakdown.length === 0 ? (
+                      <p className="text-center text-[hsl(var(--muted-foreground))] text-sm py-8">
+                        Sem despesas neste período
+                      </p>
+                    ) : (
+                      <CategoryBars data={expenseBreakdown} />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+
+            <TabsContent value="income">
+              {incomeBreakdownLoading ? (
+                <Skeleton className="h-48 w-full" />
+              ) : (
+                <Card>
+                  <CardContent className="p-6">
+                    {incomeBreakdown.length === 0 ? (
+                      <p className="text-center text-[hsl(var(--muted-foreground))] text-sm py-8">
+                        Sem receitas neste período
+                      </p>
+                    ) : (
+                      <CategoryBars data={incomeBreakdown} />
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
+
+        {/* ─── Gastos no Cartão por Categoria — 12 Meses ────────────── */}
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-[hsl(var(--primary))]" />
+                Gastos no Cartão por Categoria — 12 Meses
+              </CardTitle>
+              {!cardYearLoading && cardYearTotal > 0 && (
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+                    Total
+                  </span>
+                  <span className="font-bold text-[hsl(var(--expense))] tabular-nums">
+                    {formatCurrency(cardYearTotal)}
+                  </span>
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent>
+            {cardYearLoading ? (
+              <Skeleton className="h-48 w-full" />
+            ) : cardYearBreakdown.length === 0 ? (
+              <p className="text-center text-[hsl(var(--muted-foreground))] text-sm py-8">
+                Sem gastos no cartão neste período.
+              </p>
+            ) : (
+              <CategoryBars data={cardYearBreakdown} total={cardYearTotal} />
+            )}
+          </CardContent>
+        </Card>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Lista horizontal: para cada categoria, nome + cor + valor + barra
+ * proporcional. Reaproveitada por 3 blocos do dashboard (despesa do mês,
+ * receita do mês, gastos no cartão 12 meses).
+ */
+function CategoryBars({
+  data,
+  total: providedTotal,
+}: {
+  data: { name: string; value: number; color: string }[];
+  total?: number;
+}) {
+  const total = providedTotal ?? data.reduce((s, c) => s + c.value, 0);
+  return (
+    <div className="space-y-4">
+      {data.map((cat) => {
+        const pct = total > 0 ? (cat.value / total) * 100 : 0;
+        return (
+          <div key={cat.name}>
+            <div className="flex items-center justify-between text-sm mb-1">
+              <div className="flex items-center gap-2 min-w-0">
+                <div
+                  className="w-2.5 h-2.5 rounded-full shrink-0"
+                  style={{ backgroundColor: cat.color }}
+                />
+                <span className="truncate">{cat.name}</span>
+              </div>
+              <div className="flex items-center gap-3 text-[hsl(var(--muted-foreground))] shrink-0">
+                <span className="tabular-nums">{formatCurrency(cat.value)}</span>
+                <span className="text-xs w-10 text-right tabular-nums">
+                  {pct.toFixed(1)}%
+                </span>
+              </div>
+            </div>
+            <div className="h-2 bg-[hsl(var(--muted))] rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all duration-700"
+                style={{ width: `${pct}%`, backgroundColor: cat.color }}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

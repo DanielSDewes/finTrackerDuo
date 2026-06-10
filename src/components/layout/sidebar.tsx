@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  LayoutDashboard, ArrowLeftRight, TrendingUp, Target, BarChart3,
+  LayoutDashboard, ArrowLeftRight, TrendingUp, Target,
   Settings, Heart, ChevronLeft, ChevronRight, LogOut,
   X, CreditCard, CalendarDays, HelpCircle,
 } from "lucide-react";
@@ -27,7 +27,6 @@ const navItems = [
   { href: "/calendar", icon: CalendarDays, label: "Calendário" },
   { href: "/investments", icon: TrendingUp, label: "Investimentos" },
   { href: "/goals", icon: Target, label: "Metas" },
-  { href: "/reports", icon: BarChart3, label: "Relatórios" },
   { href: "/couple", icon: Heart, label: "Casal" },
 ];
 
