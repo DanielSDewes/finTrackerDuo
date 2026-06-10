@@ -37,7 +37,11 @@ export async function updateSession(request: NextRequest) {
     pathname === "/termos" ||
     isAuthPage;
 
-  if (!user && !isPublicPage) {
+  // Rotas /api são endpoints (cron, webhooks etc.) — autenticam por header
+  // próprio (CRON_SECRET, signing secret, etc.). Redirecionar para a página
+  // de login nesse caso quebra o cron silenciosamente: o handler nunca roda
+  // e a Vercel registra um 307 para /auth/login.
+  if (!user && !isPublicPage && !isApiRoute) {
     const url = request.nextUrl.clone();
     url.pathname = "/auth/login";
     url.searchParams.set("redirectTo", pathname);
