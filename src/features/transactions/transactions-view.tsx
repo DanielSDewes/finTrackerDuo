@@ -1,16 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   Plus, Search, ArrowUpRight, ArrowDownRight,
-  Trash2, Pencil, Calendar, Users,
+  Trash2, Pencil, Calendar, Users, CreditCard,
+  TrendingUp, TrendingDown,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
 import { usePartner } from "@/hooks/use-partner";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { transactionsService } from "@/services/transactions.service";
+import { cardsService } from "@/features/cards/services/cards.service";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { cn } from "@/lib/utils";
 import { getMonthWindow } from "@/components/shared/month-selector";
@@ -129,6 +132,24 @@ export function TransactionsView() {
     staleTime: 60_000,
   });
 
+  // Faturas de cartão do mês — exibidas como "despesas virtuais" no card
+  // Despesas. A invalidação por prefix ["cards"] (acionada por qualquer
+  // mutação de transação de cartão) refresca essa lista automaticamente,
+  // espelhando o comportamento do dashboard.
+  const { data: cardsSummary = [], isLoading: loadingCards } = useQuery({
+    queryKey: ["cards", "summary", activeUserId, couple?.id, selectedMonth],
+    queryFn: () =>
+      cardsService.getCardsSummary(
+        activeUserId,
+        couple?.id ?? null,
+        monthNum,
+        year,
+        false,
+      ),
+    enabled: !!user && !!activeUserId,
+    staleTime: 60_000,
+  });
+
   const deleteMutation = useToastMutation({
     mutationFn: (id: string) => transactionsService.deleteTransaction(id, viewingPartner),
     invalidateKeys: [["transactions"], ["monthly-stats"], ["cash-flow"]],
@@ -149,8 +170,17 @@ export function TransactionsView() {
   const incomeList = filtered.filter((t) => t.type === "income");
   const expenseList = filtered.filter((t) => t.type === "expense");
 
+  // Quando há busca, escondemos as linhas de fatura — o usuário está
+  // procurando lançamentos específicos, não as "despesas virtuais".
+  const cardBillRows = !search
+    ? cardsSummary.filter((c) => c.monthTotal > 0)
+    : [];
+
   const incomeTotal = incomeList.reduce((s, t) => s + t.amount, 0);
-  const expenseTotal = expenseList.reduce((s, t) => s + t.amount, 0);
+  const txExpenseTotal = expenseList.reduce((s, t) => s + t.amount, 0);
+  const cardExpenseTotal = cardBillRows.reduce((s, c) => s + c.monthTotal, 0);
+  const expenseTotal = txExpenseTotal + cardExpenseTotal;
+  const balance = incomeTotal - expenseTotal;
 
   const selectedMonthLabel = new Date(Date.UTC(year, monthNum - 1, 1)).toLocaleDateString(
     "pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }
@@ -328,6 +358,67 @@ export function TransactionsView() {
               )}
             </div>
 
+            {/* Saldo do mês */}
+            {!isLoading && !loadingCards && (incomeTotal > 0 || expenseTotal > 0) && (
+              <Card
+                className={cn(
+                  "mb-4 border-2 transition-colors",
+                  balance >= 0
+                    ? "border-[hsl(var(--primary)/0.3)] hover:border-[hsl(var(--primary)/0.5)]"
+                    : "border-[hsl(var(--expense)/0.3)] hover:border-[hsl(var(--expense)/0.5)]",
+                )}
+              >
+                <CardContent className="p-4 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div
+                      className={cn(
+                        "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                        balance >= 0
+                          ? "bg-[hsl(var(--primary)/0.1)]"
+                          : "bg-[hsl(var(--expense)/0.1)]",
+                      )}
+                    >
+                      {balance >= 0 ? (
+                        <TrendingUp className="w-5 h-5 text-[hsl(var(--primary))]" />
+                      ) : (
+                        <TrendingDown className="w-5 h-5 text-[hsl(var(--expense))]" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+                        Saldo do mês
+                      </p>
+                      <p
+                        className={cn(
+                          "text-2xl font-bold tabular-nums",
+                          balance >= 0
+                            ? "text-[hsl(var(--primary))]"
+                            : "text-[hsl(var(--expense))]",
+                        )}
+                      >
+                        {balance >= 0 ? "+" : ""}
+                        {formatCurrency(balance)}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0 hidden sm:block">
+                    <p className="text-[11px] text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
+                      Receitas − Despesas
+                    </p>
+                    <p className="text-xs text-[hsl(var(--muted-foreground))] tabular-nums">
+                      <span className="text-[hsl(var(--success))] font-semibold">
+                        {formatCurrency(incomeTotal)}
+                      </span>
+                      {" − "}
+                      <span className="text-[hsl(var(--expense))] font-semibold">
+                        {formatCurrency(expenseTotal)}
+                      </span>
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Receitas */}
               <Card className="border-[hsl(var(--success)/0.25)]">
@@ -382,13 +473,13 @@ export function TransactionsView() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold text-[hsl(var(--expense))]">
                       Despesas
-                      {!isLoading && expenseList.length > 0 && (
+                      {!isLoading && !loadingCards && (expenseList.length + cardBillRows.length) > 0 && (
                         <span className="ml-1.5 text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                          ({expenseList.length})
+                          ({expenseList.length + cardBillRows.length})
                         </span>
                       )}
                     </CardTitle>
-                    {!isLoading && expenseTotal > 0 && (
+                    {!isLoading && !loadingCards && expenseTotal > 0 && (
                       <span className="text-sm font-bold text-[hsl(var(--expense))]">
                         -{formatCurrency(expenseTotal)}
                       </span>
@@ -396,9 +487,9 @@ export function TransactionsView() {
                   </div>
                 </CardHeader>
                 <CardContent className="pt-0 px-3 pb-3">
-                  {isLoading ? (
+                  {isLoading || loadingCards ? (
                     <TransactionListSkeleton />
-                  ) : expenseList.length === 0 ? (
+                  ) : expenseList.length === 0 && cardBillRows.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <ArrowDownRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
@@ -408,6 +499,54 @@ export function TransactionsView() {
                   ) : (
                     <AnimatePresence>
                       <div className="space-y-0.5 max-h-[480px] overflow-y-auto pr-0.5">
+                        {/* Faturas de cartão como "despesas virtuais" — somam
+                            automaticamente conforme novos lançamentos são feitos
+                            via invalidação por prefix ["cards"]. */}
+                        {cardBillRows.map(({ card, monthTotal, billStatus }) => (
+                          <Link
+                            key={`bill-${card.id}`}
+                            href="/cards"
+                            className="flex items-center gap-3 p-2 rounded-lg hover:bg-[hsl(var(--muted)/0.5)] transition-colors cursor-pointer"
+                          >
+                            <div
+                              className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0"
+                              style={{ backgroundColor: `${card.color}33` }}
+                            >
+                              <CreditCard
+                                className="w-4 h-4"
+                                style={{ color: card.color }}
+                              />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <p className="text-sm font-medium truncate">
+                                  Fatura {card.name}
+                                </p>
+                                <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
+                                  cartão
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {billStatus && (
+                                  <span className="text-xs text-[hsl(var(--muted-foreground))]">
+                                    {billStatus === "open"
+                                      ? "aberta"
+                                      : billStatus === "closed"
+                                      ? "fechada"
+                                      : billStatus === "paid"
+                                      ? "paga"
+                                      : "atrasada"}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <p className="text-sm font-semibold text-[hsl(var(--expense))] shrink-0">
+                              -{formatCurrency(monthTotal)}
+                            </p>
+                          </Link>
+                        ))}
+
+                        {/* Transações avulsas */}
                         {expenseList.map((tx) => (
                           <TransactionRow
                             key={tx.id}
