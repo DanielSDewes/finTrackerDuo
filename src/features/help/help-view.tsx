@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
   LayoutDashboard,
   ArrowLeftRight,
@@ -13,16 +14,20 @@ import {
   Settings,
   HelpCircle,
   Lightbulb,
+  Search,
   type LucideIcon,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
 import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
 type Section = {
   id: string;
   title: string;
   icon: LucideIcon;
+  /** Palavras-chave usadas pela busca — não precisam aparecer no body. */
+  keywords?: string[];
   /** Render the content of the section. */
   body: React.ReactNode;
 };
@@ -80,6 +85,7 @@ const SECTIONS: Section[] = [
     id: "visao-geral",
     title: "Visão geral",
     icon: HelpCircle,
+    keywords: ["introdução", "começar", "como funciona", "individual", "casal", "modo"],
     body: (
       <>
         <Lead>
@@ -125,6 +131,18 @@ const SECTIONS: Section[] = [
     id: "dashboard",
     title: "Dashboard",
     icon: LayoutDashboard,
+    keywords: [
+      "receitas",
+      "despesas",
+      "saldo",
+      "mês",
+      "gráfico",
+      "pizza",
+      "fluxo de caixa",
+      "entradas",
+      "saídas",
+      "totais",
+    ],
     body: (
       <>
         <Lead>
@@ -183,6 +201,16 @@ const SECTIONS: Section[] = [
     id: "transacoes",
     title: "Transações",
     icon: ArrowLeftRight,
+    keywords: [
+      "lançamento",
+      "receita",
+      "despesa",
+      "categoria",
+      "dividir",
+      "parceiro",
+      "casal",
+      "saldo do mês",
+    ],
     body: (
       <>
         <Lead>
@@ -224,6 +252,29 @@ const SECTIONS: Section[] = [
     id: "cartoes",
     title: "Cartões",
     icon: CreditCard,
+    keywords: [
+      "fatura",
+      "parcela",
+      "parcelamento",
+      "parcela antiga",
+      "previsão",
+      "recorrente",
+      "reembolso",
+      "reembolsado",
+      "limite",
+      "consolidado",
+      "realizado",
+      "fechada",
+      "aberta",
+      "paga",
+      "atrasada",
+      "fatura travada",
+      "filtro",
+      "cleanup",
+      "fatura vazia",
+      "casal",
+      "dividir",
+    ],
     body: (
       <>
         <Lead>
@@ -326,6 +377,7 @@ const SECTIONS: Section[] = [
     id: "calendario",
     title: "Calendário",
     icon: CalendarDays,
+    keywords: ["agenda", "evento", "lembrete", "compromisso", "data", "horário"],
     body: (
       <>
         <Lead>
@@ -352,6 +404,23 @@ const SECTIONS: Section[] = [
     id: "investimentos",
     title: "Investimentos",
     icon: TrendingUp,
+    keywords: [
+      "portfólio",
+      "ativo",
+      "renda fixa",
+      "renda variável",
+      "cripto",
+      "fii",
+      "fundos imobiliários",
+      "dividendo",
+      "yield",
+      "rendimento",
+      "cotação",
+      "dólar",
+      "euro",
+      "usd",
+      "eur",
+    ],
     body: (
       <>
         <Lead>
@@ -408,6 +477,7 @@ const SECTIONS: Section[] = [
     id: "metas",
     title: "Metas",
     icon: Target,
+    keywords: ["objetivo", "reserva", "submeta", "contribuição", "progresso"],
     body: (
       <>
         <Lead>
@@ -428,6 +498,7 @@ const SECTIONS: Section[] = [
     id: "relatorios",
     title: "Relatórios",
     icon: BarChart3,
+    keywords: ["análise", "comparativo", "tendência", "breakdown"],
     body: (
       <>
         <Lead>
@@ -451,6 +522,7 @@ const SECTIONS: Section[] = [
     id: "casal",
     title: "Casal",
     icon: Heart,
+    keywords: ["convite", "parceiro", "compartilhar", "consolidado", "vínculo"],
     body: (
       <>
         <Lead>
@@ -492,6 +564,7 @@ const SECTIONS: Section[] = [
     id: "configuracoes",
     title: "Configurações",
     icon: Settings,
+    keywords: ["tema", "claro", "escuro", "perfil", "logout", "sair", "conta"],
     body: (
       <>
         <Lead>
@@ -512,6 +585,18 @@ const SECTIONS: Section[] = [
     id: "faq",
     title: "Perguntas frequentes",
     icon: HelpCircle,
+    keywords: [
+      "faq",
+      "dúvida",
+      "problema",
+      "erro",
+      "spam",
+      "email",
+      "fatura sumiu",
+      "fechada",
+      "previsão",
+      "cotação atrasada",
+    ],
     body: (
       <>
         <Subtitle>"Por que minha fatura sumiu do banco?"</Subtitle>
@@ -566,8 +651,63 @@ const SECTIONS: Section[] = [
 /* View                                                                       */
 /* -------------------------------------------------------------------------- */
 
+// Normaliza string para comparação case-insensitive sem acento.
+function normalize(s: string): string {
+  return s
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
+function sectionMatches(section: Section, query: string): boolean {
+  if (!query) return true;
+  const haystack = [
+    section.title,
+    ...(section.keywords ?? []),
+  ]
+    .map(normalize)
+    .join(" ");
+  return query
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((token) => haystack.includes(token));
+}
+
 export function HelpView() {
+  const searchParams = useSearchParams();
   const [activeId, setActiveId] = useState<string>(SECTIONS[0].id);
+  const [search, setSearch] = useState("");
+  // Evita re-scrollar ao montar várias vezes durante o mesmo carregamento.
+  const didDeepLink = useRef(false);
+
+  // Deep linking via ?section=<id> — usado pra abrir a Ajuda direto no
+  // tópico relevante a partir de pontos do app (ex.: "Saiba mais" no
+  // banner de fatura travada).
+  useEffect(() => {
+    if (didDeepLink.current) return;
+    const target = searchParams.get("section");
+    if (!target) return;
+    const exists = SECTIONS.some((s) => s.id === target);
+    if (!exists) return;
+
+    didDeepLink.current = true;
+    // Pequeno delay garante que a seção já está no DOM quando o scroll
+    // dispara (importante quando o usuário chega via Link cross-route).
+    const tid = window.setTimeout(() => {
+      setActiveId(target);
+      document.getElementById(target)?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 50);
+    return () => window.clearTimeout(tid);
+  }, [searchParams]);
+
+  const normalizedSearch = useMemo(() => normalize(search.trim()), [search]);
+  const filteredSections = useMemo(
+    () => SECTIONS.filter((s) => sectionMatches(s, normalizedSearch)),
+    [normalizedSearch],
+  );
 
   // Scroll suave + atualização do destaque no sumário. Usamos scrollIntoView
   // em vez de hash navigation pra evitar mexer na URL.
@@ -591,50 +731,89 @@ export function HelpView() {
           {/* Sumário lateral */}
           <aside className="w-full lg:w-64 lg:sticky lg:top-6 shrink-0">
             <Card className="border-border/50">
-              <CardContent className="p-3">
+              <CardContent className="p-3 space-y-2">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide px-2 py-1.5">
                   Sumário
                 </p>
+                <Input
+                  placeholder="Buscar tópico..."
+                  leftIcon={<Search />}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className="h-8 text-sm"
+                />
                 <nav className="flex flex-col">
-                  {SECTIONS.map((s) => (
-                    <button
-                      key={s.id}
-                      onClick={() => handleNavigate(s.id)}
-                      className={cn(
-                        "flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors text-left",
-                        activeId === s.id
-                          ? "bg-primary/10 text-primary font-semibold"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                      )}
-                    >
-                      <s.icon className="w-4 h-4 shrink-0" />
-                      <span className="flex-1 truncate">{s.title}</span>
-                    </button>
-                  ))}
+                  {filteredSections.length === 0 ? (
+                    <p className="text-xs text-muted-foreground px-2 py-3 text-center">
+                      Nenhum tópico encontrado para{" "}
+                      <span className="font-medium text-foreground">
+                        &quot;{search}&quot;
+                      </span>
+                    </p>
+                  ) : (
+                    filteredSections.map((s) => (
+                      <button
+                        key={s.id}
+                        onClick={() => handleNavigate(s.id)}
+                        className={cn(
+                          "flex items-center gap-2 px-2 py-2 rounded-lg text-sm transition-colors text-left",
+                          activeId === s.id
+                            ? "bg-primary/10 text-primary font-semibold"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                        )}
+                      >
+                        <s.icon className="w-4 h-4 shrink-0" />
+                        <span className="flex-1 truncate">{s.title}</span>
+                      </button>
+                    ))
+                  )}
                 </nav>
               </CardContent>
             </Card>
           </aside>
 
-          {/* Conteúdo das seções */}
+          {/* Conteúdo das seções — quando há busca ativa, mostra só as
+              seções que casaram. Sem busca, renderiza todas. */}
           <main className="flex-1 min-w-0 space-y-6">
-            {SECTIONS.map((s) => (
-              <section key={s.id} id={s.id} className="scroll-mt-6">
-                <Card className="border-border/50">
-                  <CardContent className="p-6 space-y-3">
-                    <div className="flex items-center gap-3 pb-2 border-b border-border/40">
-                      <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
-                        <s.icon className="w-4 h-4 text-primary" />
+            {filteredSections.length === 0 ? (
+              <Card className="border-border/50 border-dashed">
+                <CardContent className="p-10 text-center space-y-2">
+                  <Search className="w-6 h-6 mx-auto text-muted-foreground opacity-50" />
+                  <p className="text-sm text-muted-foreground">
+                    Nenhum tópico encontrado para{" "}
+                    <span className="font-semibold text-foreground">
+                      &quot;{search}&quot;
+                    </span>
+                    .
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => setSearch("")}
+                    className="text-xs text-primary hover:underline"
+                  >
+                    Limpar busca
+                  </button>
+                </CardContent>
+              </Card>
+            ) : (
+              filteredSections.map((s) => (
+                <section key={s.id} id={s.id} className="scroll-mt-6">
+                  <Card className="border-border/50">
+                    <CardContent className="p-6 space-y-3">
+                      <div className="flex items-center gap-3 pb-2 border-b border-border/40">
+                        <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                          <s.icon className="w-4 h-4 text-primary" />
+                        </div>
+                        <h2 className="text-lg font-bold tracking-tight">
+                          {s.title}
+                        </h2>
                       </div>
-                      <h2 className="text-lg font-bold tracking-tight">
-                        {s.title}
-                      </h2>
-                    </div>
-                    {s.body}
-                  </CardContent>
-                </Card>
-              </section>
-            ))}
+                      {s.body}
+                    </CardContent>
+                  </Card>
+                </section>
+              ))
+            )}
 
             <p className="text-center text-xs text-muted-foreground py-6">
               Sentiu falta de alguma coisa? Avisa a gente — essa página vai

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock } from "lucide-react";
 import { cardsService } from "../services/cards.service";
@@ -269,11 +270,17 @@ export function BillDetail() {
         {isBillLocked && (
           <div className="flex items-center gap-2 rounded-md border border-border/60 bg-muted/30 px-2.5 py-1.5 text-[11px] text-muted-foreground">
             <Lock className="w-3 h-3 shrink-0" />
-            <span>
+            <span className="flex-1">
               Fatura {lockedLabel}. Altere o status para{" "}
               <span className="font-semibold text-foreground">Aberta</span>{" "}
               para adicionar lançamentos.
             </span>
+            <Link
+              href="/help?section=cartoes"
+              className="font-medium text-primary hover:underline whitespace-nowrap"
+            >
+              Saiba mais
+            </Link>
           </div>
         )}
       </div>
