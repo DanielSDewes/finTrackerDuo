@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, UserRound } from "lucide-react";
+import { Loader2, UserRound, Repeat } from "lucide-react";
 import { transactionSchema, type TransactionInput } from "@/schemas/transaction";
 import { transactionsService } from "@/services/transactions.service";
 import { categoriesService } from "@/services/categories.service";
@@ -75,14 +75,18 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         couple_id: couple?.id ?? null,
         is_shared: false,
         attachments: [],
-        deleted_at: null,
+        // recurrence_type não é mais escolhido pelo usuário; recorrentes
+        // são sempre mensais com horizonte de 6 meses.
+        recurrence_type: null,
+        recurrence_end_date: null,
+        recurring_group_id: null,
       };
 
       if (transaction?.id) {
         return transactionsService.updateTransaction(transaction.id, payload);
       }
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return transactionsService.createTransaction(payload as any);
+      return transactionsService.createTransactionWithRecurrence(payload as any);
     },
     invalidateKeys: [
       ["transactions"],
@@ -197,44 +201,44 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         />
       </div>
 
-      {/* Recurring */}
-      <div className="flex items-center justify-between">
-        <Label htmlFor="is_recurring">Recorrente</Label>
-        <Controller
-          name="is_recurring"
-          control={control}
-          render={({ field }) => (
-            <Switch
-              id="is_recurring"
-              checked={field.value}
-              onCheckedChange={field.onChange}
-            />
-          )}
-        />
-      </div>
-
-      {isRecurring && (
-        <div className="space-y-2">
-          <Label>Frequência</Label>
+      {/* Recurring — sempre mensal, propaga 6 meses adiante por padrão e
+          o seed automático recria nos meses futuros conforme o usuário
+          os acessa. Edição não dispara propagação (só o create). */}
+      <div className="space-y-2 p-3 rounded-xl border border-border/50 bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div>
+            <Label
+              htmlFor="is_recurring"
+              className="flex items-center gap-1.5 text-sky-400"
+            >
+              <Repeat className="w-3.5 h-3.5" />
+              Recorrente
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Replica nos próximos 6 meses, e novos meses ganham a cópia
+              automaticamente ao lançar a 1ª transação ali.
+            </p>
+          </div>
           <Controller
-            name="recurrence_type"
+            name="is_recurring"
             control={control}
             render={({ field }) => (
-              <Select value={field.value ?? ""} onValueChange={(v) => field.onChange(v || null)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione a frequência" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="daily">Diária</SelectItem>
-                  <SelectItem value="weekly">Semanal</SelectItem>
-                  <SelectItem value="monthly">Mensal</SelectItem>
-                  <SelectItem value="yearly">Anual</SelectItem>
-                </SelectContent>
-              </Select>
+              <Switch
+                id="is_recurring"
+                checked={field.value}
+                onCheckedChange={field.onChange}
+                disabled={!!transaction?.id}
+              />
             )}
           />
         </div>
-      )}
+        {!!transaction?.id && isRecurring && (
+          <p className="text-[11px] text-muted-foreground">
+            Editar uma transação não recria as cópias futuras — para mudar a
+            série, remova as instâncias e crie de novo.
+          </p>
+        )}
+      </div>
 
       {/* For partner toggle — only when couple is active and not already in partner view */}
       {partnerId && !isPartnerForm && (

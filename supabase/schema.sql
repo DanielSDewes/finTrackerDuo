@@ -91,6 +91,11 @@ CREATE TABLE transactions (
   date                 DATE NOT NULL,
   is_shared            BOOLEAN NOT NULL DEFAULT FALSE,
   is_recurring         BOOLEAN NOT NULL DEFAULT FALSE,
+  -- recurring_group_id liga todas as instâncias propagadas a partir do
+  -- mesmo lançamento "mãe". Idêntico ao padrão usado em
+  -- credit_card_transactions: serve pra de-duplicar quando o seed do mês
+  -- vazio vai replicar a recorrente do mês anterior.
+  recurring_group_id   UUID,
   recurrence_type      TEXT CHECK (recurrence_type IN ('daily', 'weekly', 'monthly', 'yearly')),
   recurrence_end_date  DATE,
   status               TEXT NOT NULL DEFAULT 'completed'
@@ -345,6 +350,7 @@ CREATE INDEX idx_transactions_couple_id         ON transactions(couple_id);
 CREATE INDEX idx_transactions_date              ON transactions(date DESC);
 CREATE INDEX idx_transactions_type              ON transactions(type);
 CREATE INDEX idx_transactions_deleted           ON transactions(deleted_at);
+CREATE INDEX idx_transactions_recurring_group   ON transactions(recurring_group_id);
 CREATE INDEX idx_future_transactions_user_id    ON future_transactions(user_id);
 CREATE INDEX idx_future_transactions_scheduled  ON future_transactions(scheduled_date);
 CREATE INDEX idx_investments_user_id            ON investments(user_id);

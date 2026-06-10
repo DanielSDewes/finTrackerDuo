@@ -210,6 +210,10 @@ const SECTIONS: Section[] = [
       "parceiro",
       "casal",
       "saldo do mês",
+      "recorrente",
+      "recorrência",
+      "mensal",
+      "seed",
     ],
     body: (
       <>
@@ -218,6 +222,28 @@ const SECTIONS: Section[] = [
           o painel central mostra dois cards lado a lado (Receitas/Despesas) e
           um card de Saldo do Mês.
         </Lead>
+
+        <Subtitle>Recorrência</Subtitle>
+        <Bullets
+          items={[
+            <>
+              Marque o toggle <Term>Recorrente</Term> no form e a transação é
+              propagada para os próximos 6 meses automaticamente (data
+              deslocada para o mesmo dia, com clamp no último dia do mês).
+            </>,
+            <>
+              Se você abrir um mês "vazio" no futuro (depois dos 6 meses
+              iniciais), o sistema verifica recorrentes do mês anterior na
+              hora que você lança a primeira transação ali e replica as que
+              faltam — assim a série continua sem ação manual.
+            </>,
+            <>
+              Todas as cópias compartilham um{" "}
+              <Term>recurring_group_id</Term> interno usado pra deduplicar e
+              evitar criar a mesma recorrente duas vezes no mesmo mês.
+            </>,
+          ]}
+        />
 
         <Subtitle>Modo casal</Subtitle>
         <Bullets

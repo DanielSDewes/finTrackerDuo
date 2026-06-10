@@ -75,6 +75,7 @@ export type Transaction = {
   date: string;
   is_shared: boolean;
   is_recurring: boolean;
+  recurring_group_id: string | null;
   recurrence_type: RecurrenceType | null;
   recurrence_end_date: string | null;
   status: TransactionStatus;

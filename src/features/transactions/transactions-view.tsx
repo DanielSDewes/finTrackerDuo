@@ -6,7 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   Plus, Search, ArrowUpRight, ArrowDownRight,
   Trash2, Pencil, Calendar, Users, CreditCard,
-  TrendingUp, TrendingDown,
+  TrendingUp, TrendingDown, Repeat,
 } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
@@ -68,6 +68,12 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
           <Badge variant={statusVariants[tx.status] ?? "outline"} className="text-[10px] py-0 h-4 shrink-0">
             {tx.status === "completed" ? "Concluída" : tx.status === "pending" ? "Pendente" : "Cancelada"}
           </Badge>
+          {tx.is_recurring && (
+            <Badge className="text-[10px] px-1.5 py-0 h-4 shrink-0 bg-sky-400/15 text-sky-400 border-0 flex items-center gap-0.5">
+              <Repeat className="w-2.5 h-2.5" />
+              recorrente
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(tx.date)}</span>
