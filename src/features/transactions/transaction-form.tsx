@@ -17,6 +17,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { Transaction } from "@/types";
 
 type TransactionFormProps = {
@@ -52,6 +53,8 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
       category_id: transaction?.category_id ?? null,
       account_id: transaction?.account_id ?? null,
       is_recurring: transaction?.is_recurring ?? false,
+      is_installment: false,
+      installment_total: 1,
       status: transaction?.status ?? "completed",
       tags: transaction?.tags ?? [],
     },
@@ -59,6 +62,16 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
 
   const currentType = watch("type");
   const isRecurring = watch("is_recurring");
+  const isInstallment = watch("is_installment");
+  const installmentTotal = watch("installment_total");
+  const amount = watch("amount");
+
+  // Como no cartão, o usuário informa o valor de CADA parcela; o total da
+  // compra aparece só como hint de conferência.
+  const installmentTotalValue =
+    isInstallment && installmentTotal > 1 && amount
+      ? +(amount * installmentTotal).toFixed(2)
+      : null;
 
   const { data: categories } = useQuery({
     queryKey: ["categories", "transaction", user?.id, couple?.id, currentType],
@@ -69,10 +82,19 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
   const mutation = useToastMutation({
     mutationFn: async (data: TransactionInput) => {
       if (transaction?.id) {
+        // Desmarcar "Recorrente" encerra a série: exclui as cópias dos
+        // meses futuros e desfaz o vínculo das instâncias restantes.
+        // Roda ANTES do update pra que a propagação de edição abaixo não
+        // encontre mais a série.
+        if (transaction.is_recurring && !data.is_recurring) {
+          await transactionsService.stopRecurrence(transaction.id);
+        }
+
         // Em edição, NÃO sobrescrevemos os campos da série recorrente
         // (is_recurring, recurring_group_id, recurrence_type). Eles ficam
-        // sob controle do banco — caso contrário cada edição apagaria o
-        // vínculo da série e a propagação pra frente deixaria de funcionar.
+        // sob controle do banco (o stopRecurrence acima é a exceção
+        // deliberada) — caso contrário cada edição apagaria o vínculo da
+        // série e a propagação pra frente deixaria de funcionar.
         const updatePayload = {
           type: data.type,
           amount: data.amount,
@@ -151,9 +173,11 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         {errors.description && <p className="text-xs text-destructive">{errors.description.message}</p>}
       </div>
 
-      {/* Amount */}
+      {/* Amount — em parcelamentos representa o valor de UMA parcela. */}
       <div className="space-y-2">
-        <Label htmlFor="amount">Valor (R$)</Label>
+        <Label htmlFor="amount">
+          {isInstallment && !transaction?.id ? "Valor por parcela (R$)" : "Valor (R$)"}
+        </Label>
         <Input
           id="amount"
           type="number"
@@ -163,6 +187,11 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
           {...register("amount")}
         />
         {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
+        {installmentTotalValue && !transaction?.id && (
+          <p className="text-xs text-muted-foreground">
+            Total ≈ {formatCurrency(installmentTotalValue)} em {installmentTotal}x
+          </p>
+        )}
       </div>
 
       {/* Date */}
@@ -217,15 +246,74 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
         />
       </div>
 
+      {/* Parcela editada: estrutura do parcelamento é imutável; só os
+          campos comuns desta parcela podem mudar. */}
+      {transaction?.is_installment && (
+        <p className="text-xs text-muted-foreground p-2 rounded-md bg-muted/30 border border-border/40">
+          Esta é a parcela {transaction.installment_number}/{transaction.installment_total}.
+          As alterações afetam apenas esta parcela.
+        </p>
+      )}
+
+      {/* Installment — só na criação: boletos/promissórias viram N
+          transações mensais. Incompatível com recorrência. */}
+      {!transaction?.id && (
+        <div className="space-y-3 p-3 rounded-xl border border-border/50 bg-muted/20">
+          <div className="flex items-center justify-between">
+            <div>
+              <Label htmlFor="is_installment" className={isRecurring ? "opacity-40" : undefined}>
+                Parcelado
+              </Label>
+              <p className="text-xs text-muted-foreground">
+                Boleto, promissória, carnê — uma parcela por mês
+              </p>
+            </div>
+            <Controller
+              name="is_installment"
+              control={control}
+              render={({ field }) => (
+                <Switch
+                  id="is_installment"
+                  checked={field.value && !isRecurring}
+                  onCheckedChange={field.onChange}
+                  disabled={isRecurring}
+                />
+              )}
+            />
+          </div>
+
+          {isInstallment && !isRecurring && (
+            <div className="space-y-2">
+              <Label htmlFor="installment_total">Número de parcelas</Label>
+              <Input
+                id="installment_total"
+                type="number"
+                min={2}
+                max={48}
+                error={!!errors.installment_total}
+                {...register("installment_total")}
+              />
+              {errors.installment_total && (
+                <p className="text-xs text-destructive">{errors.installment_total.message}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Recurring — sempre mensal, propaga 6 meses adiante por padrão e
           o seed automático recria nos meses futuros conforme o usuário
-          os acessa. Edição não dispara propagação (só o create). */}
+          os acessa. Edição não dispara propagação (só o create), mas
+          permite DESMARCAR pra encerrar a série. */}
       <div className="space-y-2 p-3 rounded-xl border border-border/50 bg-muted/20">
         <div className="flex items-center justify-between">
           <div>
             <Label
               htmlFor="is_recurring"
-              className="flex items-center gap-1.5 text-sky-400"
+              className={cn(
+                "flex items-center gap-1.5 text-sky-400",
+                isInstallment && !transaction?.id ? "opacity-40" : undefined,
+              )}
             >
               <Repeat className="w-3.5 h-3.5" />
               Recorrente
@@ -241,18 +329,29 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
             render={({ field }) => (
               <Switch
                 id="is_recurring"
-                checked={field.value}
+                checked={field.value && (!isInstallment || !!transaction?.id)}
                 onCheckedChange={field.onChange}
-                disabled={!!transaction?.id}
+                disabled={
+                  (!!transaction?.id && !transaction.is_recurring) ||
+                  (!transaction?.id && isInstallment)
+                }
               />
             )}
           />
         </div>
-        {!!transaction?.id && isRecurring && (
+        {!!transaction?.id && transaction.is_recurring && isRecurring && (
           <p className="text-[11px] text-muted-foreground">
             Editar valor, descrição, categoria, conta ou observações dessa
             transação <span className="font-semibold">atualiza também</span>{" "}
             as cópias dos meses futuros. Data e status ficam por instância.
+            Desmarcar o toggle <span className="font-semibold">exclui</span>{" "}
+            as cópias dos meses futuros ao salvar.
+          </p>
+        )}
+        {!!transaction?.id && transaction.is_recurring && !isRecurring && (
+          <p className="text-[11px] text-destructive">
+            Ao salvar, esta transação deixa de ser recorrente e as cópias dos
+            meses futuros serão excluídas. Os meses anteriores são mantidos.
           </p>
         )}
       </div>

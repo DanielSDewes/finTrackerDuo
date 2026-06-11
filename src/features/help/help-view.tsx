@@ -246,6 +246,11 @@ const SECTIONS: Section[] = [
       "recorrência",
       "mensal",
       "seed",
+      "parcelado",
+      "parcela",
+      "boleto",
+      "promissória",
+      "carnê",
     ],
     body: (
       <>
@@ -279,9 +284,41 @@ const SECTIONS: Section[] = [
               parcela tocada.
             </>,
             <>
+              <Term>Desmarcar encerra a série.</Term> Ao editar uma transação
+              recorrente e desligar o toggle, as cópias dos meses futuros são
+              excluídas e a série deixa de se replicar. As instâncias de
+              meses anteriores são mantidas como transações normais.
+            </>,
+            <>
               Todas as cópias compartilham um{" "}
               <Term>recurring_group_id</Term> interno usado pra deduplicar e
               evitar criar a mesma recorrente duas vezes no mesmo mês.
+            </>,
+          ]}
+        />
+
+        <Subtitle>Parcelamento</Subtitle>
+        <Bullets
+          items={[
+            <>
+              Pra boletos, promissórias e carnês: marque{" "}
+              <Term>Parcelado</Term> no form e informe o número de parcelas
+              (2 a 48). Vale tanto pra receitas quanto pra despesas.
+            </>,
+            <>
+              Como no cartão, você informa o <em>valor de cada parcela</em> —
+              o hint &quot;Total ≈ R$ X em Nx&quot; mostra o total pra
+              conferência. Cada parcela vira uma transação no seu mês, com
+              badge <Term>i/Nx</Term> na lista.
+            </>,
+            <>
+              Editar uma parcela afeta <em>apenas ela</em> (diferente da
+              recorrente, que propaga pra frente). Pra remover a série
+              inteira, use <Term>Excluir parcelamento</Term> no menu da
+              linha — apaga todas as parcelas, passadas e futuras.
+            </>,
+            <>
+              Parcelado e Recorrente são mutuamente exclusivos no form.
             </>,
           ]}
         />

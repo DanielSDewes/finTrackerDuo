@@ -80,9 +80,11 @@ export const transactionsService = {
 
   /**
    * Versão alto-nível do createTransaction usada pelo form de transações:
-   *   1) insere a tx principal (com recurring_group_id se for recorrente);
-   *   2) se for recorrente, replica nos próximos N meses (default 6);
-   *   3) se for a 1ª tx do mês para esse usuário, faz seed das recorrentes
+   *   1) se for parcelada, delega pra createInstallmentGroup (N parcelas
+   *      mensais, sem recorrência);
+   *   2) insere a tx principal (com recurring_group_id se for recorrente);
+   *   3) se for recorrente, replica nos próximos N meses (default 6);
+   *   4) se for a 1ª tx do mês para esse usuário, faz seed das recorrentes
    *      do mês anterior que ainda não estavam aqui — assim recorrentes
    *      criadas há mais de 6 meses continuam aparecendo automaticamente.
    *
@@ -93,6 +95,10 @@ export const transactionsService = {
   async createTransactionWithRecurrence(
     input: Omit<Transaction, "id" | "created_at" | "updated_at" | "deleted_at">,
   ): Promise<Transaction> {
+    if (input.is_installment && (input.installment_total ?? 1) > 1) {
+      return this.createInstallmentGroup(input);
+    }
+
     const supabase = createClient();
     const isRecurring = !!input.is_recurring;
     const recurringGroupId = isRecurring
@@ -103,6 +109,11 @@ export const transactionsService = {
       ...input,
       is_recurring: isRecurring,
       recurring_group_id: recurringGroupId,
+      // Transação avulsa/recorrente nunca carrega campos de parcela.
+      is_installment: false,
+      installment_group_id: null,
+      installment_number: 1,
+      installment_total: 1,
     };
 
     const { data: main, error } = await supabase
@@ -130,6 +141,99 @@ export const transactionsService = {
     }
 
     return main as Transaction;
+  },
+
+  /**
+   * Cria as N parcelas de uma transação parcelada (boleto/promissória):
+   * uma transação por mês a partir da data informada, todas ligadas pelo
+   * mesmo installment_group_id e numeradas i/N. `amount` já é o valor de
+   * cada parcela (mesma semântica do parcelamento do cartão). Parcela
+   * nunca é recorrente — os dois modos são mutuamente exclusivos no form.
+   */
+  async createInstallmentGroup(
+    input: Omit<Transaction, "id" | "created_at" | "updated_at" | "deleted_at">,
+  ): Promise<Transaction> {
+    const supabase = createClient();
+    const total = input.installment_total;
+    const groupId = crypto.randomUUID();
+
+    const rows = [];
+    for (let i = 1; i <= total; i++) {
+      rows.push({
+        ...input,
+        date: shiftDateByMonths(input.date, i - 1),
+        is_installment: true,
+        installment_group_id: groupId,
+        installment_number: i,
+        installment_total: total,
+        is_recurring: false,
+        recurring_group_id: null,
+        recurrence_type: null,
+        recurrence_end_date: null,
+      });
+    }
+
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert(rows)
+      .select("*, category:categories(*), account:accounts(*)");
+    if (error) throw error;
+
+    try {
+      await this.seedRecurringIfFirstInMonth(input.user_id, input.date);
+    } catch (e) {
+      console.warn("Falha no seed mensal de recorrentes:", e);
+    }
+
+    return (data as Transaction[])[0];
+  },
+
+  /**
+   * Encerra a série recorrente a partir da instância informada: exclui
+   * (soft-delete) as réplicas de meses futuros e desfaz o vínculo de
+   * recorrência das instâncias restantes — sem isso, o seed mensal
+   * ressuscitaria a série ao encontrar uma instância antiga ainda marcada
+   * como recorrente.
+   */
+  async stopRecurrence(id: string) {
+    const supabase = createClient();
+
+    const { data: tx } = await supabase
+      .from("transactions")
+      .select("recurring_group_id, date")
+      .eq("id", id)
+      .maybeSingle();
+    if (!tx?.recurring_group_id) return;
+
+    const { error: deleteError } = await supabase
+      .from("transactions")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("recurring_group_id", tx.recurring_group_id)
+      .gt("date", tx.date)
+      .is("deleted_at", null);
+    if (deleteError) throw deleteError;
+
+    const { error: detachError } = await supabase
+      .from("transactions")
+      .update({ is_recurring: false, recurring_group_id: null })
+      .eq("recurring_group_id", tx.recurring_group_id)
+      .is("deleted_at", null);
+    if (detachError) throw detachError;
+  },
+
+  /**
+   * Exclui (soft-delete) todas as parcelas de um parcelamento — passadas e
+   * futuras. As policies de UPDATE (próprias e de casal) cobrem tanto as
+   * transações do usuário quanto as do parceiro.
+   */
+  async deleteInstallmentGroup(groupId: string) {
+    const supabase = createClient();
+    const { error } = await supabase
+      .from("transactions")
+      .update({ deleted_at: new Date().toISOString() })
+      .eq("installment_group_id", groupId)
+      .is("deleted_at", null);
+    if (error) throw error;
   },
 
   /**
@@ -171,10 +275,14 @@ export const transactionsService = {
       .toISOString()
       .split("T")[0];
 
+    // Parcelas ficam de fora da contagem: um parcelamento criado hoje povoa
+    // meses futuros, e isso não pode fazer o mês "parecer usado" a ponto de
+    // suprimir o seed das recorrentes quando o usuário lançar algo lá.
     const { count } = await supabase
       .from("transactions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", userId)
+      .eq("is_installment", false)
       .is("deleted_at", null)
       .gte("date", monthStart)
       .lte("date", monthEnd);

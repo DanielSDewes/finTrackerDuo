@@ -11,6 +11,10 @@ export const transactionSchema = z.object({
   is_recurring: z.boolean().default(false),
   recurrence_type: z.enum(["daily", "weekly", "monthly", "yearly"]).optional().nullable(),
   recurrence_end_date: z.string().optional().nullable(),
+  // Parcelamento: o valor informado é POR PARCELA (mesma semântica do
+  // cartão); o total da compra é amount * installment_total.
+  is_installment: z.boolean().default(false),
+  installment_total: z.coerce.number().int().min(1).max(48).default(1),
   status: z.enum(["pending", "completed", "cancelled"]).default("completed"),
   tags: z.array(z.string()).default([]),
 });

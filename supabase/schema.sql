@@ -108,6 +108,13 @@ CREATE TABLE transactions (
   recurring_group_id   UUID,
   recurrence_type      TEXT CHECK (recurrence_type IN ('daily', 'weekly', 'monthly', 'yearly')),
   recurrence_end_date  DATE,
+  -- Parcelamento (boletos/promissórias/carnês): N transações mensais ligadas
+  -- por installment_group_id, numeradas i/N — espelha o modelo usado em
+  -- credit_card_transactions. amount é o valor de CADA parcela.
+  is_installment       BOOLEAN NOT NULL DEFAULT FALSE,
+  installment_group_id UUID,
+  installment_number   INTEGER NOT NULL DEFAULT 1,
+  installment_total    INTEGER NOT NULL DEFAULT 1,
   status               TEXT NOT NULL DEFAULT 'completed'
                          CHECK (status IN ('pending', 'completed', 'cancelled')),
   tags                 TEXT[] DEFAULT '{}',
@@ -361,6 +368,7 @@ CREATE INDEX idx_transactions_date              ON transactions(date DESC);
 CREATE INDEX idx_transactions_type              ON transactions(type);
 CREATE INDEX idx_transactions_deleted           ON transactions(deleted_at);
 CREATE INDEX idx_transactions_recurring_group   ON transactions(recurring_group_id);
+CREATE INDEX idx_transactions_installment_group ON transactions(installment_group_id);
 CREATE INDEX idx_future_transactions_user_id    ON future_transactions(user_id);
 CREATE INDEX idx_future_transactions_scheduled  ON future_transactions(scheduled_date);
 CREATE INDEX idx_investments_user_id            ON investments(user_id);

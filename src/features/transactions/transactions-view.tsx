@@ -37,9 +37,10 @@ interface TransactionRowProps {
   type: "income" | "expense";
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
+  onDeleteGroup: (t: Transaction) => void;
 }
 
-function TransactionRow({ transaction: tx, type, onEdit, onDelete }: TransactionRowProps) {
+function TransactionRow({ transaction: tx, type, onEdit, onDelete, onDeleteGroup }: TransactionRowProps) {
   const statusVariants: Record<string, "success" | "warning" | "outline"> = {
     completed: "success",
     pending: "warning",
@@ -74,6 +75,11 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
               recorrente
             </Badge>
           )}
+          {tx.is_installment && (
+            <Badge variant="secondary" className="text-[10px] px-1.5 py-0 h-4 shrink-0">
+              {tx.installment_number}/{tx.installment_total}x
+            </Badge>
+          )}
         </div>
         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
           <span className="text-xs text-[hsl(var(--muted-foreground))]">{formatDate(tx.date)}</span>
@@ -96,6 +102,14 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
           actions={[
             { label: "Editar", icon: Pencil, onClick: () => onEdit(tx) },
             { label: "Excluir", icon: Trash2, destructive: true, onClick: () => onDelete(tx.id) },
+            ...(tx.is_installment && tx.installment_group_id
+              ? [{
+                  label: "Excluir parcelamento",
+                  icon: Trash2,
+                  destructive: true,
+                  onClick: () => onDeleteGroup(tx),
+                }]
+              : []),
           ]}
         />
       </div>
@@ -139,6 +153,9 @@ export function TransactionsView() {
   const [formOpen, setFormOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // Alvo do "Excluir parcelamento" — guarda a transação pra mostrar o total
+  // de parcelas no texto de confirmação.
+  const [deleteGroupTarget, setDeleteGroupTarget] = useState<Transaction | null>(null);
   const [search, setSearch] = useState("");
 
   const currentMonth = new Date().toISOString().slice(0, 7);
@@ -189,6 +206,14 @@ export function TransactionsView() {
     successMessage: "Transação excluída",
     errorMessage: "Erro ao excluir transação",
     onSuccess: () => setDeleteId(null),
+  });
+
+  const deleteGroupMutation = useToastMutation({
+    mutationFn: (groupId: string) => transactionsService.deleteInstallmentGroup(groupId),
+    invalidateKeys: [["transactions"], ["transactions-month"], ["monthly-stats"], ["cash-flow"]],
+    successMessage: "Parcelamento excluído",
+    errorMessage: "Erro ao excluir parcelamento",
+    onSuccess: () => setDeleteGroupTarget(null),
   });
 
   const handleEdit = (t: Transaction) => {
@@ -465,6 +490,7 @@ export function TransactionsView() {
                             type="income"
                             onEdit={handleEdit}
                             onDelete={setDeleteId}
+                            onDeleteGroup={setDeleteGroupTarget}
                           />
                         ))}
                       </div>
@@ -560,6 +586,7 @@ export function TransactionsView() {
                             type="expense"
                             onEdit={handleEdit}
                             onDelete={setDeleteId}
+                            onDeleteGroup={setDeleteGroupTarget}
                           />
                         ))}
                       </div>
@@ -580,6 +607,19 @@ export function TransactionsView() {
         description="Tem certeza que deseja excluir esta transação? Esta ação não pode ser desfeita."
         isPending={deleteMutation.isPending}
         onConfirm={() => deleteId && deleteMutation.mutate(deleteId)}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!deleteGroupTarget}
+        onOpenChange={(open) => !open && setDeleteGroupTarget(null)}
+        title="Excluir parcelamento"
+        confirmLabel="Excluir todas"
+        description={`Exclui todas as ${deleteGroupTarget?.installment_total ?? ""} parcelas desta série — inclusive as de meses anteriores e futuros. Esta ação não pode ser desfeita.`}
+        isPending={deleteGroupMutation.isPending}
+        onConfirm={() =>
+          deleteGroupTarget?.installment_group_id &&
+          deleteGroupMutation.mutate(deleteGroupTarget.installment_group_id)
+        }
       />
     </div>
   );

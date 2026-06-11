@@ -86,6 +86,12 @@ export type Transaction = {
   recurring_group_id: string | null;
   recurrence_type: RecurrenceType | null;
   recurrence_end_date: string | null;
+  /** Parcelamento (boleto/promissória): N transações mensais ligadas por
+   *  installment_group_id, numeradas i/N. amount é o valor de cada parcela. */
+  is_installment: boolean;
+  installment_group_id: string | null;
+  installment_number: number;
+  installment_total: number;
   status: TransactionStatus;
   tags: string[];
   attachments: string[];
