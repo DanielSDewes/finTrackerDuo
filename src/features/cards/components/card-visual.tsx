@@ -2,7 +2,6 @@
 
 import { cn, formatCurrency } from "@/lib/utils";
 import type { CreditCard, CardBrand } from "../types";
-import { BRAND_META } from "../types";
 
 type CardVisualProps = {
   card: CreditCard;
@@ -51,7 +50,6 @@ const SIZES = {
 };
 
 export function CardVisual({ card, size = "md", selected, onClick }: CardVisualProps) {
-  const meta = BRAND_META[card.brand];
   const sz = SIZES[size];
 
   return (

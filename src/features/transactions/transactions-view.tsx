@@ -103,6 +103,33 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete }: Transaction
   );
 }
 
+function MonthListSkeleton() {
+  return (
+    <div className="space-y-1 p-2">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <Skeleton key={i} className="h-10 w-full rounded-lg" />
+      ))}
+    </div>
+  );
+}
+
+function TransactionListSkeleton() {
+  return (
+    <div className="space-y-2 p-2">
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div key={i} className="flex items-center gap-3 p-2">
+          <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
+          <div className="flex-1">
+            <Skeleton className="h-4 w-36 mb-1.5" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+          <Skeleton className="h-4 w-16" />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function TransactionsView() {
   const { user, couple } = useAuthStore();
   const { selectedMonth, setSelectedMonth } = useUIStore();
@@ -191,33 +218,6 @@ export function TransactionsView() {
   const selectedMonthLabel = new Date(Date.UTC(year, monthNum - 1, 1)).toLocaleDateString(
     "pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }
   );
-
-  function MonthListSkeleton() {
-    return (
-      <div className="space-y-1 p-2">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={i} className="h-10 w-full rounded-lg" />
-        ))}
-      </div>
-    );
-  }
-
-  function TransactionListSkeleton() {
-    return (
-      <div className="space-y-2 p-2">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 p-2">
-            <Skeleton className="w-8 h-8 rounded-lg shrink-0" />
-            <div className="flex-1">
-              <Skeleton className="h-4 w-36 mb-1.5" />
-              <Skeleton className="h-3 w-20" />
-            </div>
-            <Skeleton className="h-4 w-16" />
-          </div>
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div>

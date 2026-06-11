@@ -3,10 +3,6 @@ import { applyScopeFilter } from "@/lib/supabase/filters";
 import type { CreditCard, CreditCardBill, CreditCardTransaction } from "../types";
 import type { CreditCardInput, CardTransactionInput, CardTransactionEditInput } from "../schemas/card.schema";
 
-function endOfMonth(year: number, month: number): string {
-  return new Date(Date.UTC(year, month, 0)).toISOString().split("T")[0];
-}
-
 // Move a YYYY-MM-DD date string into target (year, month), clamping the day to
 // the last valid day of that month (ex: 31/Jan → 28/Fev). Usado quando uma
 // recorrência precisa "viajar" para um mês com menos dias.

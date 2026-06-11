@@ -344,7 +344,6 @@ export const transactionsService = {
   },
 
   async getCashFlowData(userId: string, coupleId: string | null, months = 6, isShared = false) {
-    const supabase = createClient();
     const results = [];
 
     for (let i = months - 1; i >= 0; i--) {
@@ -383,15 +382,20 @@ export const transactionsService = {
     const { data, error } = await query;
     if (error) throw error;
 
+    type Row = {
+      amount: number;
+      category: { id: string; name: string; color: string } | null;
+    };
+
     const grouped: Record<string, { name: string; value: number; color: string }> = {};
-    data?.forEach((t: any) => {
+    for (const t of (data ?? []) as unknown as Row[]) {
       const catName = t.category?.name ?? "Sem categoria";
       const catId = t.category?.id ?? "none";
       if (!grouped[catId]) {
         grouped[catId] = { name: catName, value: 0, color: t.category?.color ?? "#6366f1" };
       }
       grouped[catId].value += t.amount;
-    });
+    }
 
     return Object.values(grouped).sort((a, b) => b.value - a.value);
   },

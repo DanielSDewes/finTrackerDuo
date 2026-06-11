@@ -1,16 +1,15 @@
 "use client";
 
-import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Loader2, User, Bell, Palette, Shield, LogOut } from "lucide-react";
+import { Loader2, User, Palette, Shield, LogOut } from "lucide-react";
 import { useTheme } from "next-themes";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/stores/auth.store";
+import type { UserProfile } from "@/types";
 import { getInitials } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -19,7 +18,6 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -59,7 +57,7 @@ export function SettingsView() {
       return;
     }
 
-    setUser(updated as any);
+    setUser(updated as UserProfile);
     toast.success("Perfil atualizado!");
   };
 

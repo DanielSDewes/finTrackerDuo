@@ -9,20 +9,26 @@ import { BillDetail } from "./components/bill-detail";
 import { useCardsStore } from "./stores/cards.store";
 
 export function CardsView() {
-  const { reset, selectedCardId, selectedBillMonth } = useCardsStore();
+  const { reset } = useCardsStore();
   const [mobilePane, setMobilePane] = useState<string>("cards");
 
   useEffect(() => {
     return () => { reset(); };
   }, [reset]);
 
+  // Avança o pane mobile quando o usuário seleciona cartão/fatura. Assinatura
+  // direta da store (em vez de useEffect sobre os valores) pra disparar o
+  // setState como reação ao evento externo, não durante o render.
   useEffect(() => {
-    if (selectedCardId) setMobilePane("bills");
-  }, [selectedCardId]);
-
-  useEffect(() => {
-    if (selectedBillMonth) setMobilePane("detail");
-  }, [selectedBillMonth]);
+    return useCardsStore.subscribe((state, prev) => {
+      if (state.selectedCardId && state.selectedCardId !== prev.selectedCardId) {
+        setMobilePane("bills");
+      }
+      if (state.selectedBillMonth && state.selectedBillMonth !== prev.selectedBillMonth) {
+        setMobilePane("detail");
+      }
+    });
+  }, []);
 
   return (
     <div className="flex flex-col h-full overflow-hidden">

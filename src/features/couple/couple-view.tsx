@@ -262,7 +262,7 @@ export function CoupleView() {
                         <TokenBox token={displayToken} label="Seu código de convite" />
 
                         <p className="text-xs text-muted-foreground">
-                          Seu parceiro(a) deve colar este código na seção "Aceitar convite" ao lado.
+                          Seu parceiro(a) deve colar este código na seção &quot;Aceitar convite&quot; ao lado.
                         </p>
 
                         <Button
@@ -337,7 +337,7 @@ export function CoupleView() {
                 <CardContent className="p-4 flex items-start gap-3">
                   <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                   <p className="text-sm text-muted-foreground">
-                    Você recebeu um convite. Cole o código no campo "Aceitar convite" acima.
+                    Você recebeu um convite. Cole o código no campo &quot;Aceitar convite&quot; acima.
                   </p>
                 </CardContent>
               </Card>

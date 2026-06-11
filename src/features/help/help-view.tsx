@@ -111,7 +111,7 @@ const SECTIONS: Section[] = [
             </>,
             <>
               <Term>Casal</Term> — quando um casal está ativo, transações
-              ganham um toggle "Dividir com casal" e o app oferece visão
+              ganham um toggle &quot;Dividir com casal&quot; e o app oferece visão
               consolidada nos Dashboards/Relatórios.
             </>,
             <>
@@ -168,7 +168,7 @@ const SECTIONS: Section[] = [
             <>
               <Term>Despesas do Mês</Term> — transações de saída{" "}
               <em>mais</em> o total das faturas de cartão do mês. Quando há
-              cartão, o subtítulo mostra "incl. R$ X em cartões".
+              cartão, o subtítulo mostra &quot;incl. R$ X em cartões&quot;.
             </>,
             <>
               <Term>Saldo do Mês</Term> — Receitas − Despesas. Cor primary
@@ -264,7 +264,7 @@ const SECTIONS: Section[] = [
               deslocada para o mesmo dia, com clamp no último dia do mês).
             </>,
             <>
-              Se você abrir um mês "vazio" no futuro (depois dos 6 meses
+              Se você abrir um mês &quot;vazio&quot; no futuro (depois dos 6 meses
               iniciais), o sistema verifica recorrentes do mês anterior na
               hora que você lança a primeira transação ali e replica as que
               faltam — assim a série continua sem ação manual.
@@ -374,7 +374,7 @@ const SECTIONS: Section[] = [
           items={[
             <>
               <Term>Sem fatura</Term> — meses que ainda não têm lançamento
-              ficam visíveis com label "sem fatura". O primeiro lançamento
+              ficam visíveis com label &quot;sem fatura&quot;. O primeiro lançamento
               cria a fatura no banco.
             </>,
             <>
@@ -388,7 +388,7 @@ const SECTIONS: Section[] = [
             </>,
             <>
               <Term>Fatura travada</Term> — qualquer status ≠ Aberta bloqueia
-              o botão "Lançar" e mostra um aviso. Pra incluir um novo
+              o botão &quot;Lançar&quot; e mostra um aviso. Pra incluir um novo
               lançamento retroativo, reabra a fatura.
             </>,
           ]}
@@ -400,7 +400,7 @@ const SECTIONS: Section[] = [
             <>
               <Term>Parcelamento</Term> — você informa o{" "}
               <em>valor de cada parcela</em> (não o total). O sistema replica
-              esse valor por N meses e mostra "Total da compra ≈ R$ X em Nx" no
+              esse valor por N meses e mostra &quot;Total da compra ≈ R$ X em Nx&quot; no
               form como conferência.
             </>,
             <>
@@ -425,9 +425,9 @@ const SECTIONS: Section[] = [
               compras que voltaram pro cartão.
             </>,
             <>
-              <Term>Filtros</Term> — chips abaixo da busca ("Previsão" /
-              "Parceladas") aparecem quando a fatura tem desses tipos. Click
-              isola, click de novo volta pra "Todos".
+              <Term>Filtros</Term> — chips abaixo da busca (&quot;Previsão&quot; /
+              &quot;Parceladas&quot;) aparecem quando a fatura tem desses tipos. Click
+              isola, click de novo volta pra &quot;Todos&quot;.
             </>,
           ]}
         />
@@ -632,7 +632,7 @@ const SECTIONS: Section[] = [
           items={[
             <>Crie uma meta com valor alvo e descrição.</>,
             <>Adicione contribuições incrementais (cada uma fica registrada).</>,
-            <>Quebre em submetas pra acompanhar progresso por etapa (ex.: "Reserva de R$ 50k" → submetas mensais).</>,
+            <>Quebre em submetas pra acompanhar progresso por etapa (ex.: &quot;Reserva de R$ 50k&quot; → submetas mensais).</>,
             <>Submetas têm sua própria curva de progresso e podem ser marcadas como concluídas.</>,
           ]}
         />
@@ -721,7 +721,7 @@ const SECTIONS: Section[] = [
     ],
     body: (
       <>
-        <Subtitle>"Por que minha fatura sumiu do banco?"</Subtitle>
+        <Subtitle>&quot;Por que minha fatura sumiu do banco?&quot;</Subtitle>
         <Lead>
           Quando você remove o último lançamento de uma fatura, ela é
           deletada do banco — mantemos apenas faturas com transações reais. A
@@ -729,38 +729,38 @@ const SECTIONS: Section[] = [
           lançamento recria a fatura automaticamente.
         </Lead>
 
-        <Subtitle>"Marquei como previsão e o valor sumiu do limite realizado?"</Subtitle>
+        <Subtitle>&quot;Marquei como previsão e o valor sumiu do limite realizado?&quot;</Subtitle>
         <Lead>
           É o comportamento esperado. <Term>Limite Realizado</Term> mostra só o
           que já está confirmado. <Term>Limite Consolidado</Term> continua
           incluindo a previsão.
         </Lead>
 
-        <Subtitle>"Fatura está fechada e quero adicionar um lançamento retroativo"</Subtitle>
+        <Subtitle>&quot;Fatura está fechada e quero adicionar um lançamento retroativo&quot;</Subtitle>
         <Lead>
           Mude o status da fatura para <Term>Aberta</Term> no dropdown do
           detalhe, adicione o lançamento, e retorne o status pra Fechada
           depois.
         </Lead>
 
-        <Subtitle>"Parcelei mas digitei o valor total errado"</Subtitle>
+        <Subtitle>&quot;Parcelei mas digitei o valor total errado&quot;</Subtitle>
         <Lead>
           Desde a versão atual o form pede o <Term>valor por parcela</Term>,
-          não o total. Cheque o hint "Total da compra ≈ R$ X em Nx" pra
+          não o total. Cheque o hint &quot;Total da compra ≈ R$ X em Nx&quot; pra
           conferir antes de salvar. Pra ajustar uma compra já lançada, edite
           cada parcela individualmente (o valor por parcela está armazenado).
         </Lead>
 
-        <Subtitle>"O Dólar/Euro está com a cotação de ontem"</Subtitle>
+        <Subtitle>&quot;O Dólar/Euro está com a cotação de ontem&quot;</Subtitle>
         <Lead>
           Esperado. A cotação é atualizada uma vez por dia (12:00 UTC). O
           timestamp visível em cada card indica exatamente quando foi a última
           atualização.
         </Lead>
 
-        <Subtitle>"Recebi email de confirmação no spam"</Subtitle>
+        <Subtitle>&quot;Recebi email de confirmação no spam&quot;</Subtitle>
         <Lead>
-          Comum em provedores de email transacional. Marque como "não é spam"
+          Comum em provedores de email transacional. Marque como &quot;não é spam&quot;
           ou adicione o remetente aos contatos para não perder convites de
           casal ou recuperação de senha futuras.
         </Lead>
