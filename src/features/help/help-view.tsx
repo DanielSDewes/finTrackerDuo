@@ -14,6 +14,7 @@ import {
   HelpCircle,
   Lightbulb,
   Search,
+  Tag,
   type LucideIcon,
 } from "lucide-react";
 import { Header } from "@/components/layout/header";
@@ -103,9 +104,10 @@ const SECTIONS: Section[] = [
               torno do mês selecionado no Dashboard.
             </>,
             <>
-              <Term>Categoria</Term> — toda transação tem uma (Salário, Mercado,
-              Moradia…). Defaults entram com cores distintas pra leitura rápida
-              no gráfico.
+              <Term>Categoria</Term> — classifica transações e gastos do
+              cartão (Salário, Mercado, Moradia…). Além das padrão, você
+              cadastra as suas na tela <Term>Categorias</Term>, marcando onde
+              cada uma é usada. As cores alimentam os gráficos.
             </>,
             <>
               <Term>Casal</Term> — quando um casal está ativo, transações
@@ -439,6 +441,84 @@ const SECTIONS: Section[] = [
     ),
   },
   {
+    id: "categorias",
+    title: "Categorias",
+    icon: Tag,
+    keywords: [
+      "categoria",
+      "cadastro",
+      "receita",
+      "despesa",
+      "cartão",
+      "ambas",
+      "cor",
+      "padrão",
+      "excluir",
+      "sem categoria",
+    ],
+    body: (
+      <>
+        <Lead>
+          Cadastre quantas categorias quiser e marque onde cada uma é usada:
+          no lançamento de <Term>transações</Term>, no lançamento de{" "}
+          <Term>gastos do cartão</Term>, ou em ambos. As categorias padrão do
+          app continuam disponíveis e não podem ser editadas.
+        </Lead>
+
+        <Subtitle>Regras do cadastro</Subtitle>
+        <Bullets
+          items={[
+            <>
+              <Term>Transações</Term> — a categoria aparece no form de
+              receitas/despesas. Nesse caso é obrigatório marcar se ela é{" "}
+              <Term>Receita</Term> ou <Term>Despesa</Term> (o form de
+              transações filtra pela aba selecionada).
+            </>,
+            <>
+              <Term>Cartão de crédito</Term> — a categoria aparece ao lançar
+              gastos na fatura. Cartão só registra gastos, então{" "}
+              <em>categorias de receita não podem ser de cartão</em>.
+            </>,
+            <>
+              <Term>Ambas</Term> — uma despesa pode valer pros dois mundos
+              (ex.: Alimentação no débito e no cartão). No gráfico{" "}
+              <Term>Gastos por Categoria</Term> do Dashboard os valores se
+              somam numa fatia só.
+            </>,
+            <>
+              <Term>Cor</Term> — escolha na paleta ou personalize. É ela que
+              pinta as pizzas e barras do Dashboard.
+            </>,
+          ]}
+        />
+
+        <Subtitle>Edição e exclusão</Subtitle>
+        <Bullets
+          items={[
+            <>
+              Editar nome/cor reflete imediatamente em listas e gráficos —
+              os lançamentos apontam pra categoria, não pra uma cópia.
+            </>,
+            <>
+              Excluir uma categoria <em>não apaga lançamento nenhum</em>:
+              transações e gastos de cartão antigos passam a aparecer como{" "}
+              <Term>Sem categoria</Term>.
+            </>,
+            <>
+              Categorias do(a) parceiro(a) ficam visíveis quando o casal está
+              ativo, mas só quem criou pode editar/excluir.
+            </>,
+          ]}
+        />
+
+        <Tip>
+          Ícones de categoria foram aposentados — a identidade visual agora é
+          só a cor, consistente em todos os gráficos e listas.
+        </Tip>
+      </>
+    ),
+  },
+  {
     id: "calendario",
     title: "Calendário",
     icon: CalendarDays,
@@ -610,7 +690,8 @@ const SECTIONS: Section[] = [
       <>
         <Lead>
           Tela onde você ajusta preferências da conta: tema (claro/escuro),
-          informações pessoais, gerenciamento de categorias, e desconexão.
+          informações pessoais e desconexão. O cadastro de categorias tem
+          tela própria na barra lateral (veja a seção Categorias).
         </Lead>
         <Bullets
           items={[

@@ -64,17 +64,27 @@ CREATE TABLE accounts (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ---- categories (income/expense/investment) ----
+-- ---- categories (cadastradas pelo usuário; defaults com user_id NULL) ----
+-- Cada categoria marca onde é usada:
+--   * is_transaction — aparece no lançamento de transações; `type` indica se
+--                      é receita (income) ou despesa (expense)
+--   * is_card        — aparece no lançamento de fatura do cartão
+-- Pode ser as duas coisas ("ambas"). Receita nunca pode ser de cartão
+-- (cartão só registra gastos) — CHECK categories_income_not_card.
+-- `type` permanece NOT NULL: categorias só de cartão ficam como 'expense'
+-- (gasto por definição). 'investment' é legado de bancos antigos.
 CREATE TABLE categories (
-  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  user_id     UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  couple_id   UUID REFERENCES couples(id) ON DELETE SET NULL,
-  name        TEXT NOT NULL,
-  type        TEXT NOT NULL CHECK (type IN ('income', 'expense', 'investment')),
-  color       TEXT NOT NULL DEFAULT '#6366f1',
-  icon        TEXT NOT NULL DEFAULT 'tag',
-  is_default  BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id         UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id       UUID REFERENCES couples(id) ON DELETE SET NULL,
+  name            TEXT NOT NULL,
+  type            TEXT NOT NULL CHECK (type IN ('income', 'expense', 'investment')),
+  color           TEXT NOT NULL DEFAULT '#6366f1',
+  is_transaction  BOOLEAN NOT NULL DEFAULT FALSE,
+  is_card         BOOLEAN NOT NULL DEFAULT FALSE,
+  is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT categories_income_not_card CHECK (NOT (is_card AND type = 'income'))
 );
 
 -- ---- transactions (movimentações reais) ----
@@ -1309,36 +1319,32 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 -- - Receitas em verdes/teals (sinal de entrada).
 -- - Despesas espalhadas por todo o spectrum (vermelho/laranja/azul/roxo etc.)
 --   para diferenciar visualmente quando o usuário tem muitas categorias.
--- - Investimentos em azul/violeta/laranja, sem repetir tons das despesas.
 -- Cada cor é única dentro do tipo (e entre tipos, exceto pelo "Outros" cinza,
 -- que é genérico e propositalmente neutro).
-INSERT INTO categories (id, user_id, name, type, color, icon, is_default) VALUES
+--
+-- Receitas são só de transação; despesas valem para transação E cartão
+-- ("ambas"), espelhando o backfill da migration 2026-06-10.
+INSERT INTO categories (id, user_id, name, type, color, is_transaction, is_card, is_default) VALUES
   -- Receitas
-  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#16a34a', 'briefcase',       TRUE),
-  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#0d9488', 'laptop',          TRUE),
-  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#65a30d', 'trending-up',     TRUE),
-  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#059669', 'plus-circle',     TRUE),
+  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#16a34a', TRUE, FALSE, TRUE),
+  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#0d9488', TRUE, FALSE, TRUE),
+  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#65a30d', TRUE, FALSE, TRUE),
+  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#059669', TRUE, FALSE, TRUE),
 
   -- Despesas
-  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#dc2626', 'home',            TRUE),
-  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#ea580c', 'utensils',        TRUE),
-  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#ca8a04', 'car',             TRUE),
-  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#0891b2', 'heart-pulse',     TRUE),
-  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#2563eb', 'graduation-cap',  TRUE),
-  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#db2777', 'gamepad-2',       TRUE),
-  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#9333ea', 'shirt',           TRUE),
-  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#e11d48', 'gift',            TRUE),
-  (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', 'paw-print',       TRUE),
-  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#475569', 'repeat',          TRUE),
-  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#c026d3', 'credit-card',     TRUE),
-  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#4f46e5', 'trending-up',     TRUE),
-  (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', 'more-horizontal', TRUE),
-
-  -- Investimentos
-  (uuid_generate_v4(), NULL, 'Renda Fixa',          'investment', '#0284c7', 'shield',          TRUE),
-  (uuid_generate_v4(), NULL, 'Renda Variável',      'investment', '#7c3aed', 'trending-up',     TRUE),
-  (uuid_generate_v4(), NULL, 'Fundos Imobiliários', 'investment', '#be185d', 'building-2',      TRUE),
-  (uuid_generate_v4(), NULL, 'Criptomoedas',        'investment', '#f97316', 'bitcoin',         TRUE);
+  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#dc2626', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#ea580c', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#ca8a04', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#0891b2', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#2563eb', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#db2777', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#9333ea', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#e11d48', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#475569', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#c026d3', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#4f46e5', TRUE, TRUE,  TRUE),
+  (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', TRUE, TRUE,  TRUE);
 
 
 -- =============================================================================

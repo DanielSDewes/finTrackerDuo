@@ -58,7 +58,7 @@ export type CreditCardTransaction = {
   created_at: string;
   updated_at: string;
   deleted_at: string | null;
-  category?: { id: string; name: string; color: string; icon: string } | null;
+  category?: { id: string; name: string; color: string } | null;
 };
 
 export type CardMonth = {

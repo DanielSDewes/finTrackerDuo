@@ -678,7 +678,7 @@ O `shared_group_id` permite identificar e remover as duas partes de um rateio ju
 ```
 profiles              → dados do usuário (espelho do auth.users)
 couples               → vínculo entre dois usuários
-categories            → categorias de transação (padrão + customizadas)
+categories            → categorias de transação e/ou cartão (padrão + cadastradas pelo usuário)
 transactions          → movimentações financeiras (receitas/despesas)
 credit_cards          → cartões de crédito cadastrados
 credit_card_bills     → faturas mensais de cada cartão
@@ -780,10 +780,13 @@ Isso significa que se o usuário tem R$ 500 em despesas avulsas e R$ 800 em fatu
 ### 10.4 Categorias
 
 - Categorias padrão (`is_default = true`, `user_id = NULL`) são visíveis para todos
-- Usuários podem criar categorias customizadas (`user_id = seu_id`)
-- Categorias têm `type`: `income | expense | investment`
-- O ícone é um nome de ícone Lucide em kebab-case (ex: `"utensils"`, `"shopping-cart"`)
-- Para renderizar: usar o componente `<CategoryIcon name={cat.icon} />`
+- Usuários cadastram as próprias na tela **Categorias** (`/categories`, `user_id = seu_id`)
+- Cada categoria marca onde é usada: `is_transaction` (form de transações) e/ou `is_card` (lançamento de fatura do cartão)
+- Categorias de transação têm `type`: `income | expense` (obrigatório); receita nunca pode ser de cartão (CHECK `categories_income_not_card`)
+- Categorias só de cartão ficam gravadas com `type = 'expense'` (coluna NOT NULL; gasto por definição)
+- `type = 'investment'` é legado: linhas inertes (ambos os flags FALSE) que não aparecem em nenhum form
+- Não há mais ícone por categoria — a identidade visual é a cor (`color`), usada nos gráficos e listas
+- Excluir categoria não apaga lançamentos: FKs são `ON DELETE SET NULL` e os itens passam a "Sem categoria"
 
 ### 10.5 Metas Financeiras
 

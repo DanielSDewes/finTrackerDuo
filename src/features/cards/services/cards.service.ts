@@ -388,7 +388,7 @@ export const cardsService = {
     const supabase = createClient();
     const { data, error } = await supabase
       .from("credit_card_transactions")
-      .select("*, category:categories(id,name,color,icon)")
+      .select("*, category:categories(id,name,color)")
       .eq("bill_id", billId)
       .is("deleted_at", null)
       .order("date", { ascending: false })
@@ -719,7 +719,7 @@ export const cardsService = {
     let query = supabase
       .from("credit_card_transactions")
       .select(
-        "amount, category:categories(id,name,color,icon), bill:credit_card_bills!inner(month,year)",
+        "amount, category:categories(id,name,color), bill:credit_card_bills!inner(month,year)",
       )
       .is("deleted_at", null)
       .eq("is_reimbursed", false)

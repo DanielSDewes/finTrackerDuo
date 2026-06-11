@@ -7,7 +7,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard, ArrowLeftRight, TrendingUp, Target,
   Settings, Heart, ChevronLeft, ChevronRight, LogOut,
-  X, CreditCard, CalendarDays, HelpCircle,
+  X, CreditCard, CalendarDays, HelpCircle, Tag,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/stores/ui.store";
@@ -24,6 +24,7 @@ const navItems = [
   { href: "/dashboard", icon: LayoutDashboard, label: "Dashboard" },
   { href: "/transactions", icon: ArrowLeftRight, label: "Transações" },
   { href: "/cards", icon: CreditCard, label: "Cartões" },
+  { href: "/categories", icon: Tag, label: "Categorias" },
   { href: "/calendar", icon: CalendarDays, label: "Calendário" },
   { href: "/investments", icon: TrendingUp, label: "Investimentos" },
   { href: "/goals", icon: Target, label: "Metas" },

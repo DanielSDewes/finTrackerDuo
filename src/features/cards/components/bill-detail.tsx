@@ -22,7 +22,6 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { BILL_STATUS_META } from "../types";
 import type { CreditCardTransaction } from "../types";
-import { CategoryIcon } from "@/components/shared/category-icon";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -496,11 +495,10 @@ function TransactionRow({
           color: tx.category?.color ?? "hsl(var(--muted-foreground))",
         }}
       >
-        {tx.category?.icon ? (
-          <CategoryIcon name={tx.category.icon} className="w-4 h-4" />
-        ) : (
-          <span className="text-xs">💳</span>
-        )}
+        <span
+          className="w-3 h-3 rounded-full"
+          style={{ backgroundColor: "currentColor" }}
+        />
       </div>
 
       {/* Info */}

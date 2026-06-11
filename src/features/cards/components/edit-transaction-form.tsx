@@ -15,7 +15,6 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { CategoryIcon } from "@/components/shared/category-icon";
 import type { CreditCardTransaction } from "../types";
 
 type EditCardTransactionFormProps = {
@@ -47,8 +46,8 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
   const isForecast = watch("is_forecast");
 
   const { data: categories } = useQuery({
-    queryKey: ["categories", user?.id, "expense"],
-    queryFn: () => categoriesService.getCategories(user!.id, "expense", couple?.id),
+    queryKey: ["categories", "card", user?.id, couple?.id],
+    queryFn: () => categoriesService.getCardCategories(user!.id, couple?.id),
     enabled: !!user,
   });
 
@@ -135,9 +134,10 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
                 {categories?.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     <span className="flex items-center gap-2">
-                      {cat.icon && (
-                        <CategoryIcon name={cat.icon} className="w-4 h-4 shrink-0" />
-                      )}
+                      <span
+                        className="w-2.5 h-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: cat.color }}
+                      />
                       {cat.name}
                     </span>
                   </SelectItem>

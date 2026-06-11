@@ -51,9 +51,17 @@ export type Category = {
   user_id: string | null;
   couple_id: string | null;
   name: string;
+  /**
+   * Receita/despesa quando is_transaction. Categorias só de cartão ficam
+   * como "expense" (gasto por definição). "investment" é legado de bancos
+   * antigos — linhas inertes que não aparecem em nenhum form.
+   */
   type: CategoryType;
   color: string;
-  icon: string;
+  /** Disponível no lançamento de transações. */
+  is_transaction: boolean;
+  /** Disponível no lançamento de fatura do cartão. Nunca em receitas. */
+  is_card: boolean;
   is_default: boolean;
   created_at: string;
 };

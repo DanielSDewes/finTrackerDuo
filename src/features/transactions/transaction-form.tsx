@@ -61,9 +61,8 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
   const isRecurring = watch("is_recurring");
 
   const { data: categories } = useQuery({
-    queryKey: ["categories", user?.id, currentType],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    queryFn: () => categoriesService.getCategories(user!.id, currentType as any, couple?.id),
+    queryKey: ["categories", "transaction", user?.id, couple?.id, currentType],
+    queryFn: () => categoriesService.getTransactionCategories(user!.id, currentType, couple?.id),
     enabled: !!user,
   });
 
