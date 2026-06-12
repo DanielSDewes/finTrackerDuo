@@ -9,8 +9,16 @@ import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { cardsService } from "@/features/cards/services/cards.service";
 import { formatCurrency, formatMonth } from "@/lib/utils";
+import { INVESTMENT_CHART_COLOR } from "@/lib/investment-category";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+
+const SERIES_LABELS: Record<string, string> = {
+  income: "Receitas",
+  expense: "Despesas",
+  investment: "Investimentos",
+  balance: "Saldo",
+};
 
 export function CashFlowChart() {
   const { user, couple, isShared, scopeKey } = useScopeFilter();
@@ -29,14 +37,29 @@ export function CashFlowChart() {
     enabled: !!user,
   });
 
+  const { data: cardsInvestment } = useQuery({
+    queryKey: ["cash-flow", "cards", "investment", scopeKey],
+    queryFn: () =>
+      cardsService.getCardsInvestmentCashFlow(user!.id, couple?.id ?? null, 6, isShared),
+    enabled: !!user,
+  });
+
   const chartData = data?.map((d) => {
     const cardExpense =
       cardsCashFlow?.find((c) => c.month === d.month)?.expense ?? 0;
-    const expense = d.expense + cardExpense;
+    const cardInvestment =
+      cardsInvestment?.find((c) => c.month === d.month)?.investment ?? 0;
+    // Investimento (transações + cartão) sai da série de despesas e vira uma
+    // terceira série própria; o saldo segue descontando tudo (aporte também é
+    // saída de caixa), então as três áreas continuam somando o total de antes.
+    const totalExpense = d.expense + cardExpense;
+    const investment = d.investment + cardInvestment;
+    const expense = totalExpense - investment;
     return {
       ...d,
       expense,
-      balance: d.income - expense,
+      investment,
+      balance: d.income - totalExpense,
       month: formatMonth(d.month + "-01"),
     };
   });
@@ -71,6 +94,10 @@ export function CashFlowChart() {
                 <stop offset="5%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0.3} />
                 <stop offset="95%" stopColor="hsl(0, 84%, 60%)" stopOpacity={0} />
               </linearGradient>
+              <linearGradient id="investmentGrad" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="5%" stopColor={INVESTMENT_CHART_COLOR} stopOpacity={0.3} />
+                <stop offset="95%" stopColor={INVESTMENT_CHART_COLOR} stopOpacity={0} />
+              </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
             <XAxis
@@ -94,13 +121,11 @@ export function CashFlowChart() {
               }}
               formatter={(value, name) => [
                 formatCurrency(Number(value)),
-                name === "income" ? "Receitas" : name === "expense" ? "Despesas" : "Saldo",
+                SERIES_LABELS[String(name)] ?? String(name),
               ]}
             />
             <Legend
-              formatter={(value) =>
-                value === "income" ? "Receitas" : value === "expense" ? "Despesas" : "Saldo"
-              }
+              formatter={(value) => SERIES_LABELS[String(value)] ?? String(value)}
               wrapperStyle={{ fontSize: 12 }}
             />
             <Area
@@ -115,6 +140,13 @@ export function CashFlowChart() {
               dataKey="expense"
               stroke="hsl(0, 84%, 60%)"
               fill="url(#expenseGrad)"
+              strokeWidth={2}
+            />
+            <Area
+              type="monotone"
+              dataKey="investment"
+              stroke={INVESTMENT_CHART_COLOR}
+              fill="url(#investmentGrad)"
               strokeWidth={2}
             />
           </AreaChart>

@@ -242,7 +242,10 @@ export type ChartDataPoint = {
 export type CashFlowDataPoint = {
   month: string;
   income: number;
+  /** Total de despesas do mês, incluindo a parcela de investimento. */
   expense: number;
+  /** Parcela de `expense` lançada na categoria "Investimento" (aportes). */
+  investment: number;
   balance: number;
 };
 

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { applyScopeFilter } from "@/lib/supabase/filters";
+import { isInvestmentCategoryName } from "@/lib/investment-category";
 import type { Transaction, FilterOptions, PaginationOptions, SortOptions } from "@/types";
 
 // Quantos meses adiante o "Recorrente" replica por padrão. Mesma escolha
@@ -434,7 +435,7 @@ export const transactionsService = {
 
     let query = supabase
       .from("transactions")
-      .select("type, amount")
+      .select("type, amount, category:categories(name)")
       .is("deleted_at", null)
       .neq("status", "cancelled")
       .gte("date", startDate)
@@ -445,10 +446,24 @@ export const transactionsService = {
     const { data, error } = await query;
     if (error) throw error;
 
-    const income = data?.filter((t) => t.type === "income").reduce((sum, t) => sum + t.amount, 0) ?? 0;
-    const expense = data?.filter((t) => t.type === "expense").reduce((sum, t) => sum + t.amount, 0) ?? 0;
+    type Row = { type: string; amount: number; category: { name: string } | null };
 
-    return { income, expense, savings: income - expense };
+    let income = 0;
+    let expense = 0;
+    let investment = 0;
+    for (const t of (data ?? []) as unknown as Row[]) {
+      if (t.type === "income") {
+        income += t.amount;
+      } else if (t.type === "expense") {
+        // `expense` segue sendo o total de despesas (inclui aportes) para não
+        // alterar os cards de totais; `investment` é a parcela "Investimento",
+        // separada apenas na montagem dos gráficos.
+        expense += t.amount;
+        if (isInvestmentCategoryName(t.category?.name)) investment += t.amount;
+      }
+    }
+
+    return { income, expense, investment, savings: income - expense };
   },
 
   async getCashFlowData(userId: string, coupleId: string | null, months = 6, isShared = false) {
@@ -463,6 +478,7 @@ export const transactionsService = {
         month,
         income: stats.income,
         expense: stats.expense,
+        investment: stats.investment,
         balance: stats.income - stats.expense,
       });
     }

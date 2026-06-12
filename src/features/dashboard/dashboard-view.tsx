@@ -14,6 +14,7 @@ import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { transactionsService } from "@/services/transactions.service";
 import { cardsService } from "@/features/cards/services/cards.service";
 import { formatCurrency, formatDate, formatMonth, calculateChange } from "@/lib/utils";
+import { INVESTMENT_CHART_COLOR } from "@/lib/investment-category";
 import { Header } from "@/components/layout/header";
 import { MonthSelector } from "@/components/shared/month-selector";
 import { CashFlowChart } from "./cash-flow-chart";
@@ -24,6 +25,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+const CASH_FLOW_LABELS: Record<string, string> = {
+  income: "Receitas",
+  expense: "Despesas",
+  investment: "Investimentos",
+};
 
 export function DashboardView() {
   const { user, couple, isShared, scopeKey } = useScopeFilter();
@@ -123,8 +130,12 @@ export function DashboardView() {
     : 0;
   const cardYearTotal = cardYearBreakdown.reduce((s, c) => s + c.value, 0);
 
+  // Aportes ("Investimento") viram uma terceira barra; a barra de despesas
+  // passa a mostrar só o gasto comum (total − investimento), sem dupla
+  // contagem. Aqui não há cartão — é fluxo de transações dos 12 meses.
   const cashFlow12Chart = cashFlow12.map((d) => ({
     ...d,
+    expense: d.expense - d.investment,
     month: formatMonth(d.month + "-01"),
   }));
 
@@ -548,11 +559,12 @@ export function DashboardView() {
                     <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip
                       contentStyle={{ background: "hsl(var(--popover))", border: "1px solid hsl(var(--border))", borderRadius: "8px", fontSize: 12 }}
-                      formatter={(v, n) => [formatCurrency(Number(v)), n === "income" ? "Receitas" : "Despesas"]}
+                      formatter={(v, n) => [formatCurrency(Number(v)), CASH_FLOW_LABELS[String(n)] ?? String(n)]}
                     />
-                    <Legend formatter={(v) => v === "income" ? "Receitas" : "Despesas"} wrapperStyle={{ fontSize: 12 }} />
+                    <Legend formatter={(v) => CASH_FLOW_LABELS[String(v)] ?? String(v)} wrapperStyle={{ fontSize: 12 }} />
                     <Bar dataKey="income" fill="hsl(142, 76%, 36%)" radius={[4, 4, 0, 0]} />
                     <Bar dataKey="expense" fill="hsl(0, 84%, 60%)" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="investment" fill={INVESTMENT_CHART_COLOR} radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               )}

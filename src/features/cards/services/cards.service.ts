@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { applyScopeFilter } from "@/lib/supabase/filters";
+import { INVESTMENT_CATEGORY_NAME } from "@/lib/investment-category";
 import type { CreditCard, CreditCardBill, CreditCardTransaction } from "../types";
 import type { CreditCardInput, CardTransactionInput, CardTransactionEditInput } from "../schemas/card.schema";
 
@@ -846,6 +847,58 @@ export const cardsService = {
     }
 
     return monthKeys.map((m) => ({ month: m, expense: byMonth[m] }));
+  },
+
+  /**
+   * Parcela "Investimento" do gasto de cartão por mês, nos últimos `months`
+   * meses. Complementa getCardsCashFlow para que o gráfico de fluxo de caixa
+   * consiga separar aportes feitos no cartão das despesas comuns. O escopo
+   * (individual via user_id / casal via RLS) e a exclusão de reembolsos
+   * espelham getCardCategoryBreakdown.
+   */
+  async getCardsInvestmentCashFlow(
+    userId: string,
+    coupleId: string | null,
+    months = 6,
+    isShared = false,
+  ) {
+    const supabase = createClient();
+
+    const monthKeys: string[] = [];
+    for (let i = months - 1; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      monthKeys.push(d.toISOString().slice(0, 7));
+    }
+    const minYear = Number(monthKeys[0].slice(0, 4));
+
+    let query = supabase
+      .from("credit_card_transactions")
+      .select(
+        "amount, category:categories!inner(name), bill:credit_card_bills!inner(month,year)",
+      )
+      .is("deleted_at", null)
+      .eq("is_reimbursed", false)
+      .eq("category.name", INVESTMENT_CATEGORY_NAME)
+      .gte("bill.year", minYear);
+
+    // Individual: só lançamentos do próprio usuário. Casal: a RLS já restringe
+    // ao casal, então não filtramos por usuário.
+    if (!(isShared && coupleId)) query = query.eq("user_id", userId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    type Row = { amount: number; bill: { month: number; year: number } };
+
+    const byMonth: Record<string, number> = {};
+    for (const k of monthKeys) byMonth[k] = 0;
+    for (const row of (data ?? []) as unknown as Row[]) {
+      const key = `${row.bill.year}-${String(row.bill.month).padStart(2, "0")}`;
+      if (key in byMonth) byMonth[key] += row.amount;
+    }
+
+    return monthKeys.map((m) => ({ month: m, investment: byMonth[m] }));
   },
 
   async getCardsSummary(userId: string, coupleId: string | null, month: number, year: number, isShared = false) {
