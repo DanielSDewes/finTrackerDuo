@@ -96,13 +96,21 @@ export function InvestmentForm({ investment, onSuccess }: InvestmentFormProps) {
           : 0,
       };
 
-      if (investment?.id) {
-        return investmentsService.updateInvestment(investment.id, payload);
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      return investmentsService.createInvestment(payload as any);
+      const saved = investment?.id
+        ? await investmentsService.updateInvestment(investment.id, payload)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        : await investmentsService.createInvestment(payload as any);
+
+      await investmentsService.logAudit({
+        user_id: user!.id,
+        action: investment?.id ? "update" : "create",
+        entity: "investment",
+        label: data.asset_name,
+      });
+
+      return saved;
     },
-    invalidateKeys: [["investment-summary"]],
+    invalidateKeys: [["investment-summary"], ["investment-audit"]],
     successMessage: investment ? "Investimento atualizado!" : "Investimento adicionado!",
     errorMessage: "Erro ao salvar investimento",
     onSuccess: () => onSuccess?.(),

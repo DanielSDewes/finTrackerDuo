@@ -30,6 +30,9 @@ CREATE TABLE profiles (
   phone       TEXT,
   currency    TEXT NOT NULL DEFAULT 'BRL',
   locale      TEXT NOT NULL DEFAULT 'pt-BR',
+  -- Perfil de investidor (conservador/moderado/arrojado); usado na seção de
+  -- investimentos para medir aderência da carteira.
+  investor_profile TEXT CHECK (investor_profile IN ('conservador', 'moderado', 'arrojado')),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -188,6 +191,51 @@ CREATE TABLE investment_dividends (
   received_at     DATE NOT NULL DEFAULT CURRENT_DATE,
   notes           TEXT,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- investment_transactions (ledger de operações — modelo aditivo) ----
+-- Histórico de movimentações ao lado das posições; não recalcula `investments`.
+CREATE TABLE investment_transactions (
+  id             UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  investment_id  UUID NOT NULL REFERENCES investments(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  kind           TEXT NOT NULL CHECK (kind IN (
+                    'buy', 'sell', 'transfer', 'bonus',
+                    'split', 'reverse_split', 'subscription', 'conversion')),
+  date           DATE NOT NULL DEFAULT CURRENT_DATE,
+  quantity       DECIMAL(18,8) NOT NULL DEFAULT 0,
+  unit_price     DECIMAL(15,6) NOT NULL DEFAULT 0,
+  fees           DECIMAL(15,2) NOT NULL DEFAULT 0,
+  total          DECIMAL(15,2) NOT NULL DEFAULT 0,
+  realized_gain  DECIMAL(15,2),
+  broker         TEXT,
+  notes          TEXT,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- investment_goals (metas da carteira: patrimônio / renda passiva) ----
+CREATE TABLE investment_goals (
+  id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id       UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  couple_id     UUID REFERENCES couples(id) ON DELETE SET NULL,
+  kind          TEXT NOT NULL CHECK (kind IN ('networth', 'monthly_income', 'custom')),
+  title         TEXT NOT NULL,
+  target_amount DECIMAL(15,2) NOT NULL CHECK (target_amount > 0),
+  is_shared     BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- ---- investment_audit_log (histórico de alterações — append-only) ----
+CREATE TABLE investment_audit_log (
+  id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  action      TEXT NOT NULL CHECK (action IN ('create', 'update', 'delete')),
+  entity      TEXT NOT NULL CHECK (entity IN ('investment', 'operation', 'dividend', 'goal')),
+  label       TEXT NOT NULL,
+  detail      TEXT,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 -- ---- goals (metas financeiras) ----
@@ -375,6 +423,10 @@ CREATE INDEX idx_investments_user_id            ON investments(user_id);
 CREATE INDEX idx_investments_yield              ON investments(last_yield_at) WHERE yield_rate IS NOT NULL AND is_active = TRUE;
 CREATE INDEX idx_investment_dividends_inv       ON investment_dividends(investment_id, received_at DESC);
 CREATE INDEX idx_investment_dividends_user      ON investment_dividends(user_id);
+CREATE INDEX idx_investment_transactions_inv    ON investment_transactions(investment_id, date DESC);
+CREATE INDEX idx_investment_transactions_user   ON investment_transactions(user_id);
+CREATE INDEX idx_investment_goals_user          ON investment_goals(user_id);
+CREATE INDEX idx_investment_audit_user          ON investment_audit_log(user_id, created_at DESC);
 CREATE INDEX idx_goals_user_id                  ON goals(user_id);
 CREATE INDEX idx_accounts_user_id               ON accounts(user_id);
 CREATE INDEX idx_categories_user_id             ON categories(user_id);
@@ -433,6 +485,14 @@ CREATE TRIGGER trg_transactions_updated_at
 
 CREATE TRIGGER trg_investments_updated_at
   BEFORE UPDATE ON investments
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_investment_transactions_updated_at
+  BEFORE UPDATE ON investment_transactions
+  FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
+
+CREATE TRIGGER trg_investment_goals_updated_at
+  BEFORE UPDATE ON investment_goals
   FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 
 CREATE TRIGGER trg_goals_updated_at
@@ -535,6 +595,9 @@ ALTER TABLE transactions              ENABLE ROW LEVEL SECURITY;
 ALTER TABLE future_transactions       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investments               ENABLE ROW LEVEL SECURITY;
 ALTER TABLE investment_dividends      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investment_transactions   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investment_goals          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE investment_audit_log      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goals                     ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goal_contributions        ENABLE ROW LEVEL SECURITY;
 ALTER TABLE goal_subgoals             ENABLE ROW LEVEL SECURITY;
@@ -718,6 +781,37 @@ CREATE POLICY "Users can view own dividends" ON investment_dividends
 
 CREATE POLICY "Users can manage own dividends" ON investment_dividends
   FOR ALL USING (auth.uid() = user_id);
+
+-- ---- investment_transactions ----
+CREATE POLICY "Users can view own investment transactions" ON investment_transactions
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    investment_id IN (
+      SELECT id FROM investments
+      WHERE is_shared = TRUE AND couple_id IN (
+        SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Users can manage own investment transactions" ON investment_transactions
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- investment_goals ----
+CREATE POLICY "Users can view own investment goals" ON investment_goals
+  FOR SELECT USING (
+    auth.uid() = user_id OR
+    (is_shared = TRUE AND couple_id IN (
+      SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    ))
+  );
+
+CREATE POLICY "Users can manage own investment goals" ON investment_goals
+  FOR ALL USING (auth.uid() = user_id);
+
+-- ---- investment_audit_log ----
+CREATE POLICY "Users can use own investment audit log" ON investment_audit_log
+  FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
 
 -- ---- goals ----
 CREATE POLICY "Users can view own goals" ON goals

@@ -1,5 +1,7 @@
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[];
 
+export type InvestorProfile = "conservador" | "moderado" | "arrojado";
+
 export type UserProfile = {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export type UserProfile = {
   phone: string | null;
   currency: string;
   locale: string;
+  investor_profile: InvestorProfile | null;
   created_at: string;
   updated_at: string;
 };
@@ -162,6 +165,57 @@ export type InvestmentDividend = {
   amount: number;
   received_at: string;
   notes: string | null;
+  created_at: string;
+};
+
+export type InvestmentTransactionKind =
+  | "buy" | "sell" | "transfer" | "bonus"
+  | "split" | "reverse_split" | "subscription" | "conversion";
+
+/** Movimentação do ledger de operações (modelo aditivo: histórico ao lado das
+ *  posições, sem recalcular `investments`). */
+export type InvestmentTransaction = {
+  id: string;
+  investment_id: string;
+  user_id: string;
+  kind: InvestmentTransactionKind;
+  date: string;
+  quantity: number;
+  unit_price: number;
+  fees: number;
+  total: number;
+  /** Resultado realizado — preenchido apenas em vendas. */
+  realized_gain: number | null;
+  broker: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type InvestmentGoalKind = "networth" | "monthly_income" | "custom";
+
+export type InvestmentGoal = {
+  id: string;
+  user_id: string;
+  couple_id: string | null;
+  kind: InvestmentGoalKind;
+  title: string;
+  target_amount: number;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AuditAction = "create" | "update" | "delete";
+export type AuditEntity = "investment" | "operation" | "dividend" | "goal";
+
+export type InvestmentAuditLog = {
+  id: string;
+  user_id: string;
+  action: AuditAction;
+  entity: AuditEntity;
+  label: string;
+  detail: string | null;
   created_at: string;
 };
 

@@ -33,3 +33,27 @@ export const dividendSchema = z.object({
 });
 
 export type DividendInput = z.output<typeof dividendSchema>;
+
+export const investmentTransactionSchema = z.object({
+  kind: z.enum([
+    "buy", "sell", "transfer", "bonus",
+    "split", "reverse_split", "subscription", "conversion",
+  ]),
+  date: z.string().min(1, "Data obrigatória"),
+  quantity: z.coerce.number().nonnegative("Quantidade inválida").default(0),
+  unit_price: z.coerce.number().nonnegative("Preço inválido").default(0),
+  fees: z.coerce.number().nonnegative().default(0),
+  broker: z.string().max(120).optional().nullable(),
+  notes: z.string().max(300).optional().nullable(),
+});
+
+export type InvestmentTransactionInput = z.output<typeof investmentTransactionSchema>;
+
+export const investmentGoalSchema = z.object({
+  kind: z.enum(["networth", "monthly_income", "custom"]),
+  title: z.string().min(1, "Título obrigatório").max(120),
+  target_amount: z.coerce.number().positive("Defina um alvo maior que zero"),
+  is_shared: z.boolean().default(false),
+});
+
+export type InvestmentGoalInput = z.output<typeof investmentGoalSchema>;

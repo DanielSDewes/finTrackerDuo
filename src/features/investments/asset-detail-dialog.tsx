@@ -11,8 +11,13 @@ import {
   Wallet,
   Percent,
   Loader2,
+  ArrowLeftRight,
 } from "lucide-react";
-import { dividendSchema, type DividendInput } from "@/schemas/investment";
+import { Controller } from "react-hook-form";
+import {
+  dividendSchema, type DividendInput,
+  investmentTransactionSchema, type InvestmentTransactionInput,
+} from "@/schemas/investment";
 import { investmentsService } from "@/services/investments.service";
 import { useAuthStore } from "@/stores/auth.store";
 import { useZodForm } from "@/hooks/use-zod-form";
@@ -23,19 +28,31 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { formatCurrency, formatDate, formatPercent } from "@/lib/utils";
-import type { Investment } from "@/types";
+import { formatCurrency, formatDate, formatPercent, formatNumber } from "@/lib/utils";
+import type { Investment, InvestmentTransactionKind } from "@/types";
 
 const periodLabel: Record<string, string> = {
   daily: "ao dia",
   monthly: "ao mês",
   annual: "ao ano",
+};
+
+export const OPERATION_LABELS: Record<InvestmentTransactionKind, string> = {
+  buy: "Compra",
+  sell: "Venda",
+  transfer: "Transferência",
+  bonus: "Bonificação",
+  split: "Desdobramento",
+  reverse_split: "Grupamento",
+  subscription: "Subscrição",
+  conversion: "Conversão",
 };
 
 type AssetDetailDialogProps = {
@@ -70,6 +87,7 @@ function AssetDetailContent({ investment }: { investment: Investment }) {
     mutationFn: (id: string) => investmentsService.deleteDividend(id),
     invalidateKeys: [
       ["investment-dividends", investment.id],
+      ["investment-dividends-all"],
       ["investment-summary"],
     ],
     successMessage: "Dividendo removido",
@@ -157,6 +175,7 @@ function AssetDetailContent({ investment }: { investment: Investment }) {
         {adding && user && (
           <DividendForm
             investmentId={investment.id}
+            assetName={investment.asset_name}
             userId={user.id}
             onDone={() => setAdding(false)}
           />
@@ -204,16 +223,20 @@ function AssetDetailContent({ investment }: { investment: Investment }) {
           )}
         </div>
       </div>
+
+      <OperationsSection investment={investment} />
     </div>
   );
 }
 
 function DividendForm({
   investmentId,
+  assetName,
   userId,
   onDone,
 }: {
   investmentId: string;
+  assetName: string;
   userId: string;
   onDone: () => void;
 }) {
@@ -226,17 +249,25 @@ function DividendForm({
   });
 
   const mutation = useToastMutation({
-    mutationFn: (data: DividendInput) =>
-      investmentsService.addDividend({
+    mutationFn: async (data: DividendInput) => {
+      const dividend = await investmentsService.addDividend({
         investment_id: investmentId,
         user_id: userId,
         amount: data.amount,
         received_at: data.received_at,
         notes: data.notes ?? null,
-      }),
+      });
+      await investmentsService.logAudit({
+        user_id: userId, action: "create", entity: "dividend",
+        label: assetName, detail: formatCurrency(data.amount),
+      });
+      return dividend;
+    },
     invalidateKeys: [
       ["investment-dividends", investmentId],
+      ["investment-dividends-all"],
       ["investment-summary"],
+      ["investment-audit"],
     ],
     successMessage: "Dividendo lançado!",
     errorMessage: "Erro ao lançar dividendo",
@@ -283,6 +314,263 @@ function DividendForm({
           <><Loader2 className="animate-spin w-3.5 h-3.5 mr-1" /> Salvando...</>
         ) : (
           "Adicionar dividendo"
+        )}
+      </Button>
+    </form>
+  );
+}
+
+function OperationsSection({ investment }: { investment: Investment }) {
+  const { user } = useAuthStore();
+  const [adding, setAdding] = useState(false);
+
+  const { data: operations = [], isLoading } = useQuery({
+    queryKey: ["investment-transactions", investment.id],
+    queryFn: () => investmentsService.listTransactions(investment.id),
+  });
+
+  const deleteMutation = useToastMutation({
+    mutationFn: (id: string) => investmentsService.deleteTransaction(id),
+    invalidateKeys: [
+      ["investment-transactions", investment.id],
+      ["investment-transactions-all"],
+    ],
+    successMessage: "Operação removida",
+    errorMessage: "Erro ao remover operação",
+  });
+
+  const realizedTotal = operations.reduce((s, o) => s + (o.realized_gain ?? 0), 0);
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="text-sm font-semibold flex items-center gap-1.5">
+            <ArrowLeftRight className="w-3.5 h-3.5" />
+            Operações
+          </h3>
+          {realizedTotal !== 0 && (
+            <p className="text-[11px] text-muted-foreground">
+              Resultado realizado:{" "}
+              <span className={`font-medium ${realizedTotal >= 0 ? "text-success" : "text-expense"}`}>
+                {realizedTotal >= 0 ? "+" : ""}{formatCurrency(realizedTotal)}
+              </span>
+            </p>
+          )}
+        </div>
+        <Button
+          size="sm"
+          variant={adding ? "secondary" : "default"}
+          className="h-7 text-xs gap-1"
+          onClick={() => setAdding((v) => !v)}
+        >
+          <Plus className="w-3.5 h-3.5" />
+          {adding ? "Cancelar" : "Registrar"}
+        </Button>
+      </div>
+
+      {adding && user && (
+        <OperationForm
+          investment={investment}
+          userId={user.id}
+          onDone={() => setAdding(false)}
+        />
+      )}
+
+      <div className="rounded-xl border border-border/40 divide-y divide-border/40">
+        {isLoading ? (
+          Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="p-3">
+              <Skeleton className="h-4 w-32 mb-1" />
+              <Skeleton className="h-3 w-24" />
+            </div>
+          ))
+        ) : operations.length === 0 ? (
+          <div className="p-6 text-center text-xs text-muted-foreground">
+            <ArrowLeftRight className="w-6 h-6 mx-auto mb-1.5 opacity-40" />
+            Nenhuma operação registrada ainda
+          </div>
+        ) : (
+          operations.map((op) => (
+            <div key={op.id} className="flex items-center gap-3 p-3">
+              <div className="w-8 h-8 rounded-full bg-muted/60 flex items-center justify-center shrink-0">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-muted-foreground" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <Badge variant="outline" className="text-[10px] py-0 h-4">
+                    {OPERATION_LABELS[op.kind]}
+                  </Badge>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatNumber(op.quantity, op.quantity % 1 === 0 ? 0 : 8)} un.
+                    {op.unit_price > 0 && ` × ${formatCurrency(op.unit_price)}`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {formatDate(op.date)}
+                  {op.fees > 0 ? ` · custos ${formatCurrency(op.fees)}` : ""}
+                  {op.notes ? ` · ${op.notes}` : ""}
+                </p>
+              </div>
+              <div className="text-right shrink-0">
+                {op.total > 0 && (
+                  <p className="text-sm font-semibold tabular-nums">{formatCurrency(op.total)}</p>
+                )}
+                {op.kind === "sell" && op.realized_gain != null && (
+                  <p className={`text-[11px] font-medium ${op.realized_gain >= 0 ? "text-success" : "text-expense"}`}>
+                    {op.realized_gain >= 0 ? "+" : ""}{formatCurrency(op.realized_gain)}
+                  </p>
+                )}
+              </div>
+              <Button
+                size="icon-sm"
+                variant="ghost"
+                className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                onClick={() => deleteMutation.mutate(op.id)}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+function OperationForm({
+  investment,
+  userId,
+  onDone,
+}: {
+  investment: Investment;
+  userId: string;
+  onDone: () => void;
+}) {
+  const { register, handleSubmit, control, watch, formState: { errors } } =
+    useZodForm(investmentTransactionSchema, {
+      defaultValues: {
+        kind: "buy",
+        date: new Date().toISOString().slice(0, 10),
+        quantity: 0,
+        unit_price: 0,
+        fees: 0,
+        broker: investment.broker ?? "",
+        notes: "",
+      },
+    });
+
+  const kind = watch("kind");
+
+  const mutation = useToastMutation({
+    mutationFn: async (data: InvestmentTransactionInput) => {
+      const qty = Number(data.quantity) || 0;
+      const price = Number(data.unit_price) || 0;
+      const fees = Number(data.fees) || 0;
+      const gross = qty * price;
+      // Compra soma custos; venda desconta; eventos (bonificação etc.) usam o
+      // bruto (em geral 0).
+      const total =
+        data.kind === "buy" ? gross + fees : data.kind === "sell" ? gross - fees : gross;
+      // Resultado realizado só faz sentido na venda; usa o preço médio atual
+      // do ativo (modelo aditivo: a posição não é recalculada aqui).
+      const realized_gain =
+        data.kind === "sell" ? (price - investment.average_price) * qty - fees : null;
+
+      const tx = await investmentsService.addTransaction({
+        investment_id: investment.id,
+        user_id: userId,
+        kind: data.kind,
+        date: data.date,
+        quantity: qty,
+        unit_price: price,
+        fees,
+        total,
+        realized_gain,
+        broker: data.broker || null,
+        notes: data.notes || null,
+      });
+
+      await investmentsService.logAudit({
+        user_id: userId, action: "create", entity: "operation",
+        label: investment.asset_name, detail: OPERATION_LABELS[data.kind],
+      });
+
+      return tx;
+    },
+    invalidateKeys: [
+      ["investment-transactions", investment.id],
+      ["investment-transactions-all"],
+      ["investment-audit"],
+    ],
+    successMessage: "Operação registrada!",
+    errorMessage: "Erro ao registrar operação",
+    onSuccess: () => onDone(),
+  });
+
+  return (
+    <form
+      onSubmit={handleSubmit((data) => mutation.mutate(data as InvestmentTransactionInput))}
+      className="p-3 rounded-xl border border-border/50 bg-muted/20 space-y-3"
+    >
+      <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-1">
+          <Label className="text-xs">Tipo</Label>
+          <Controller
+            name="kind"
+            control={control}
+            render={({ field }) => (
+              <Select value={field.value} onValueChange={field.onChange}>
+                <SelectTrigger className="h-9">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(OPERATION_LABELS) as InvestmentTransactionKind[]).map((k) => (
+                    <SelectItem key={k} value={k}>{OPERATION_LABELS[k]}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="op-date" className="text-xs">Data</Label>
+          <Input id="op-date" type="date" error={!!errors.date} {...register("date")} />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-3 gap-2">
+        <div className="space-y-1">
+          <Label htmlFor="op-qty" className="text-xs">Quantidade</Label>
+          <Input id="op-qty" type="number" step="0.00000001" {...register("quantity")} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="op-price" className="text-xs">Preço un. (R$)</Label>
+          <Input id="op-price" type="number" step="0.000001" {...register("unit_price")} />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor="op-fees" className="text-xs">Custos (R$)</Label>
+          <Input id="op-fees" type="number" step="0.01" {...register("fees")} />
+        </div>
+      </div>
+
+      {kind === "sell" && (
+        <p className="text-[10px] text-muted-foreground">
+          O resultado da venda usa o preço médio atual do ativo ({formatCurrency(investment.average_price)}).
+        </p>
+      )}
+
+      <div className="space-y-1">
+        <Label htmlFor="op-notes" className="text-xs">Observação (opcional)</Label>
+        <Textarea id="op-notes" rows={2} placeholder="Ex: corretora destino, evento societário..." {...register("notes")} />
+      </div>
+
+      <Button type="submit" size="sm" className="w-full h-8" disabled={mutation.isPending}>
+        {mutation.isPending ? (
+          <><Loader2 className="animate-spin w-3.5 h-3.5 mr-1" /> Salvando...</>
+        ) : (
+          "Registrar operação"
         )}
       </Button>
     </form>
