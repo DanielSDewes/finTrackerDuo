@@ -29,8 +29,17 @@ import {
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { TransactionForm } from "./transaction-form";
-import type { Transaction } from "@/types";
+import type { Transaction, TransactionStatus } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
+
+// Filtro de status da lista. "all" = sem filtro; os demais espelham os
+// valores de `status` das transações (a coluna `status` no banco).
+const STATUS_FILTERS: { value: TransactionStatus | "all"; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "pending", label: "Pendentes" },
+  { value: "completed", label: "Concluídas" },
+  { value: "cancelled", label: "Canceladas" },
+];
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -157,6 +166,7 @@ export function TransactionsView() {
   // de parcelas no texto de confirmação.
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<Transaction | null>(null);
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<TransactionStatus | "all">("all");
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const months = getMonthWindow(selectedMonth);
@@ -221,16 +231,21 @@ export function TransactionsView() {
     setFormOpen(true);
   };
 
-  const filtered = (data?.data ?? []).filter(
-    (tx) => !search || tx.description.toLowerCase().includes(search.toLowerCase())
-  );
+  const hasActiveFilter = !!search || statusFilter !== "all";
+
+  const filtered = (data?.data ?? []).filter((tx) => {
+    if (search && !tx.description.toLowerCase().includes(search.toLowerCase())) return false;
+    if (statusFilter !== "all" && tx.status !== statusFilter) return false;
+    return true;
+  });
 
   const incomeList = filtered.filter((t) => t.type === "income");
   const expenseList = filtered.filter((t) => t.type === "expense");
 
-  // Quando há busca, escondemos as linhas de fatura — o usuário está
-  // procurando lançamentos específicos, não as "despesas virtuais".
-  const cardBillRows = !search
+  // Com busca ou filtro de status ativo, escondemos as linhas de fatura: são
+  // "despesas virtuais" agregadas, sem status por lançamento, então não fazem
+  // sentido ao procurar transações específicas ou filtrar por pendentes.
+  const cardBillRows = !hasActiveFilter
     ? cardsSummary.filter((c) => c.monthTotal > 0)
     : [];
 
@@ -277,6 +292,7 @@ export function TransactionsView() {
                 onClick={() => {
                   setViewingPartner((v) => !v);
                   setSearch("");
+                  setStatusFilter("all");
                   setFormOpen(false);
                   setEditingTransaction(null);
                 }}
@@ -322,6 +338,24 @@ export function TransactionsView() {
               />
             </DialogContent>
           </Dialog>
+        </div>
+
+        {/* Filtro por status */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide mr-0.5">
+            Status
+          </span>
+          {STATUS_FILTERS.map(({ value, label }) => (
+            <Button
+              key={value}
+              variant={statusFilter === value ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setStatusFilter(value)}
+            >
+              {label}
+            </Button>
+          ))}
         </div>
 
         {/* Two-panel layout */}
@@ -477,7 +511,7 @@ export function TransactionsView() {
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <ArrowUpRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                        {search ? "Nenhuma receita encontrada" : "Nenhuma receita neste mês"}
+                        {hasActiveFilter ? "Nenhuma receita encontrada" : "Nenhuma receita neste mês"}
                       </p>
                     </div>
                   ) : (
@@ -525,7 +559,7 @@ export function TransactionsView() {
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <ArrowDownRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                        {search ? "Nenhuma despesa encontrada" : "Nenhuma despesa neste mês"}
+                        {hasActiveFilter ? "Nenhuma despesa encontrada" : "Nenhuma despesa neste mês"}
                       </p>
                     </div>
                   ) : (
