@@ -646,18 +646,12 @@ CREATE POLICY "Owner can create couple" ON couples
 CREATE POLICY "Members can update couple" ON couples
   FOR UPDATE USING (auth.uid() = owner_id OR auth.uid() = partner_id);
 
--- Permite que qualquer usuário autenticado encontre um convite pendente
--- por invite_token (necessário pois o convidado ainda não é partner_id)
-CREATE POLICY "Anyone can view pending couple for invite lookup" ON couples
-  FOR SELECT USING (status = 'pending');
-
--- Permite ao convidado aceitar o convite: USING valida a row antiga
--- (ainda pending, sem partner), WITH CHECK valida a nova (vira active
--- e o caller se torna o partner)
-CREATE POLICY "Authenticated user can accept pending invite" ON couples
-  FOR UPDATE
-  USING      (status = 'pending' AND partner_id IS NULL)
-  WITH CHECK (auth.uid() = partner_id AND status = 'active');
+-- O aceite de convite NÃO usa policy aberta. Liberar SELECT em status =
+-- 'pending' vazaria invite_token/invite_email de todos os convites, e um
+-- UPDATE que não valida o token deixaria qualquer um sequestrar o convite
+-- alheio. Em vez disso, o aceite passa pela RPC accept_couple_invite(p_token)
+-- (SECURITY DEFINER, mais abaixo na seção de RPCs): o token é validado no
+-- servidor e nenhuma linha de couples fica visível para não-membros.
 
 -- ---- accounts ----
 CREATE POLICY "Users can view own accounts" ON accounts
@@ -1215,6 +1209,55 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION soft_delete_card_installment_group(UUID) TO authenticated;
+
+
+-- ---- Aceite de convite de casal (valida o token no servidor) ------------------
+-- Substitui as policies abertas de SELECT/UPDATE em couples. O convidado chama
+-- esta RPC com o token; nada de couples fica legível para não-membros, e é
+-- impossível aceitar um convite sem possuir o token.
+CREATE OR REPLACE FUNCTION accept_couple_invite(p_token TEXT)
+RETURNS couples
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  v_row couples;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Não autenticado';
+  END IF;
+
+  -- Trava a linha do convite pelo token (o token é o segredo). Roda como dono
+  -- da função, então enxerga a row mesmo sem policy de SELECT para terceiros.
+  SELECT * INTO v_row
+  FROM couples
+  WHERE invite_token = p_token
+    AND status = 'pending'
+    AND partner_id IS NULL
+  FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Convite inválido ou já utilizado';
+  END IF;
+
+  -- auth.uid() continua sendo o chamador mesmo em SECURITY DEFINER.
+  IF v_row.owner_id = auth.uid() THEN
+    RAISE EXCEPTION 'Você não pode aceitar o próprio convite';
+  END IF;
+
+  UPDATE couples
+  SET partner_id = auth.uid(),
+      status     = 'active',
+      updated_at = NOW()
+  WHERE id = v_row.id
+  RETURNING * INTO v_row;
+
+  RETURN v_row;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION accept_couple_invite(TEXT) TO authenticated;
 
 
 -- ---- Accrue diário do rendimento dos investimentos ----------------------------

@@ -41,25 +41,23 @@ export const coupleService = {
 
   async acceptInvite(token: string, userId: string): Promise<Couple> {
     const supabase = createClient();
-    const { data: couple, error: fetchError } = await supabase
-      .from("couples")
-      .select("*")
-      .eq("invite_token", token)
-      .eq("status", "pending")
-      .single();
+    // O aceite passa por uma RPC SECURITY DEFINER que valida o token no
+    // servidor e ativa o vínculo. A RLS de couples não expõe convites
+    // pendentes a quem ainda não é membro — sem isso, qualquer autenticado
+    // conseguia ler/sequestrar convites alheios.
+    const { error } = await supabase.rpc("accept_couple_invite", {
+      p_token: token.trim(),
+    });
+    if (error) {
+      // O texto do RAISE EXCEPTION do Postgres chega em error.message.
+      throw new Error(error.message || "Convite inválido ou expirado");
+    }
 
-    if (fetchError || !couple) throw new Error("Convite inválido ou expirado");
-    if (couple.owner_id === userId) throw new Error("Você não pode aceitar seu próprio convite");
-
-    const { data, error } = await supabase
-      .from("couples")
-      .update({ partner_id: userId, status: "active" })
-      .eq("id", couple.id)
-      .select("*, owner:owner_id(id,name,email,avatar_url), partner:partner_id(id,name,email,avatar_url)")
-      .single();
-
-    if (error) throw error;
-    return data as Couple;
+    // Já membro: re-busca com os perfis de owner/partner embutidos (as policies
+    // de leitura do casal e do parceiro agora autorizam o usuário).
+    const couple = await coupleService.getCouple(userId);
+    if (!couple) throw new Error("Não foi possível carregar o casal após o aceite");
+    return couple;
   },
 
   async dissolveCouple(coupleId: string): Promise<void> {
