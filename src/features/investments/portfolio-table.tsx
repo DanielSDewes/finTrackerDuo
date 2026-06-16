@@ -187,8 +187,10 @@ export function PortfolioTable({ investments, totalCurrent, onDetail, onEdit, on
         </div>
       </div>
 
-      {/* Tabela */}
-      <div className="rounded-xl border border-border/50 overflow-x-auto">
+      {/* Tabela — overflow-y-hidden evita que o scroll horizontal (overflow-x
+          acopla overflow-y para 'auto') vire uma armadilha de scroll vertical
+          que engole a rolagem da página em telas mais estreitas. */}
+      <div className="rounded-xl border border-border/50 overflow-x-auto overflow-y-hidden">
         <table className="w-full min-w-[920px] text-sm">
           <thead>
             <tr className="border-b border-border/50 bg-muted/30">

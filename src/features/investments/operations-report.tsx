@@ -81,7 +81,7 @@ export function OperationsReport() {
               Nenhuma operação registrada. Lance compras e vendas na tela de detalhes de cada ativo.
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto overflow-y-hidden">
               <table className="w-full min-w-[760px] text-sm">
                 <thead>
                   <tr className="border-b border-border/50 bg-muted/30 text-muted-foreground">
