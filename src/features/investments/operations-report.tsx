@@ -8,7 +8,7 @@ import { formatCurrency, formatDate, formatNumber, cn } from "@/lib/utils";
 import { downloadCsv } from "@/lib/export";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { OPERATION_LABELS } from "./asset-detail-dialog";
 
@@ -65,9 +65,6 @@ export function OperationsReport() {
       </div>
 
       <Card>
-        <CardHeader className="sr-only">
-          <CardTitle>Movimentações</CardTitle>
-        </CardHeader>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="p-4 space-y-3">
