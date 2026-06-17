@@ -955,6 +955,62 @@ CREATE POLICY "Couple members can view partner card bills" ON credit_card_bills
     )
   );
 
+-- Membros do casal podem CRIAR/ATUALIZAR/REMOVER faturas dos cartões do
+-- parceiro. Necessário para o parceiro lançar/editar no cartão compartilhado:
+-- findOrCreateBill cria a fatura do mês, e o recálculo de
+-- total/owner_amount/partner_amount precisa do UPDATE (a limpeza de fatura
+-- vazia precisa do DELETE). Espelha as policies de partner card transactions.
+CREATE POLICY "Couple members can insert partner card bills" ON credit_card_bills
+  FOR INSERT WITH CHECK (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id IN (
+        SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+        FROM couples
+        WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+          AND status = 'active' AND partner_id IS NOT NULL
+      )
+    )
+  );
+
+CREATE POLICY "Couple members can update partner card bills" ON credit_card_bills
+  FOR UPDATE
+  USING (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id IN (
+        SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+        FROM couples
+        WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+          AND status = 'active' AND partner_id IS NOT NULL
+      )
+    )
+  )
+  WITH CHECK (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id IN (
+        SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+        FROM couples
+        WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+          AND status = 'active' AND partner_id IS NOT NULL
+      )
+    )
+  );
+
+CREATE POLICY "Couple members can delete partner card bills" ON credit_card_bills
+  FOR DELETE USING (
+    card_id IN (
+      SELECT id FROM credit_cards
+      WHERE user_id IN (
+        SELECT CASE WHEN owner_id = auth.uid() THEN partner_id ELSE owner_id END
+        FROM couples
+        WHERE (owner_id = auth.uid() OR partner_id = auth.uid())
+          AND status = 'active' AND partner_id IS NOT NULL
+      )
+    )
+  );
+
 -- ---- credit_card_transactions ----
 CREATE POLICY "Users can view own card transactions" ON credit_card_transactions
   FOR SELECT USING (

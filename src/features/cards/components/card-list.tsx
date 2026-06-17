@@ -21,7 +21,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { CreditCard as CreditCardType } from "../types";
 
 export function CardList() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, scopeKey } = useScopeFilter();
   const { partnerFirstName } = usePartner();
   const { selectedCardId, setSelectedCard } = useCardsStore();
 
@@ -31,7 +31,7 @@ export function CardList() {
 
   const { data: cards = [], isLoading } = useQuery({
     queryKey: ["cards", scopeKey],
-    queryFn: () => cardsService.getCards(user!.id, couple?.id ?? null, isShared),
+    queryFn: () => cardsService.getCards(user!.id, couple?.id ?? null),
     enabled: !!user,
   });
 

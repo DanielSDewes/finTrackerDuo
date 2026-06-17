@@ -1,5 +1,4 @@
 import { createClient } from "@/lib/supabase/client";
-import { applyScopeFilter } from "@/lib/supabase/filters";
 import { INVESTMENT_CATEGORY_NAME } from "@/lib/investment-category";
 import type { CreditCard, CreditCardBill, CreditCardTransaction } from "../types";
 import type { CreditCardInput, CardTransactionInput, CardTransactionEditInput } from "../schemas/card.schema";
@@ -30,7 +29,7 @@ function resolveTxDate(
 export const cardsService = {
   // ─── Cards ────────────────────────────────────────────────────────────────
 
-  async getCards(userId: string, coupleId: string | null, isShared = false, consolidateCouple = false) {
+  async getCards(userId: string, coupleId: string | null) {
     const supabase = createClient();
     let query = supabase
       .from("credit_cards")
@@ -38,7 +37,16 @@ export const cardsService = {
       .eq("is_active", true)
       .order("created_at");
 
-    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple });
+    // Visibilidade do casal: meus cartões + qualquer cartão marcado como
+    // compartilhado. A RLS já limita as linhas aos cartões dos dois parceiros,
+    // então NÃO dependemos de couple_id estar setado na linha — o que antes
+    // escondia cartões compartilhados cujo couple_id ficou null (criados antes
+    // do casal, ou marcados via update, que não grava couple_id).
+    if (coupleId) {
+      query = query.or(`user_id.eq.${userId},is_shared.eq.true`);
+    } else {
+      query = query.eq("user_id", userId);
+    }
 
     const { data, error } = await query;
     if (error) throw error;
@@ -815,7 +823,7 @@ export const cardsService = {
       monthKeys.push(d.toISOString().slice(0, 7));
     }
 
-    const cards = await this.getCards(userId, coupleId, isShared, isShared);
+    const cards = await this.getCards(userId, coupleId);
     if (cards.length === 0) {
       return monthKeys.map((m) => ({ month: m, expense: 0 }));
     }
@@ -904,7 +912,7 @@ export const cardsService = {
   async getCardsSummary(userId: string, coupleId: string | null, month: number, year: number, isShared = false) {
     const supabase = createClient();
 
-    const cards = await this.getCards(userId, coupleId, isShared, isShared);
+    const cards = await this.getCards(userId, coupleId);
 
     const summary = await Promise.all(
       cards.map(async (card) => {
