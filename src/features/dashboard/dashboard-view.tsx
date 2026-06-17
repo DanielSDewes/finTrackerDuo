@@ -154,8 +154,10 @@ export function DashboardView() {
   });
 
   // Totalizadores dos 12 meses pra cabeçalho dos cards.
+  // "Total Gasto" mostra só o gasto comum: exclui os aportes (categoria
+  // "Investimento"), assim como a barra de despesas do gráfico.
   const totalIncome12 = cashFlow12Full.reduce((s, d) => s + d.income, 0);
-  const totalExpense12 = cashFlow12Full.reduce((s, d) => s + d.expense, 0);
+  const totalExpense12 = cashFlow12Full.reduce((s, d) => s + (d.expense - d.investment), 0);
   const avgSavings12 = cashFlow12Full.length
     ? cashFlow12Full.reduce((s, d) => s + (d.income - d.expense), 0) / cashFlow12Full.length
     : 0;
