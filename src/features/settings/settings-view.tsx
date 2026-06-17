@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChangePasswordForm } from "@/features/settings/change-password-form";
 
 const profileSchema = z.object({
   name: z.string().min(2, "Nome muito curto").max(100),
@@ -191,9 +192,7 @@ export function SettingsView() {
                 <CardDescription>Altere sua senha de acesso</CardDescription>
               </CardHeader>
               <CardContent>
-                <Button variant="outline" asChild>
-                  <a href="/auth/reset-password">Redefinir senha por email</a>
-                </Button>
+                <ChangePasswordForm />
               </CardContent>
             </Card>
 
