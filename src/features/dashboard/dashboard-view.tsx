@@ -83,12 +83,28 @@ export function DashboardView() {
   });
 
   // ─── Antigos blocos da tela de Relatórios (movidos pra cá em jun/2026) ──
-  // Fluxo de caixa dos últimos 12 meses (transações comuns; não inclui
-  // cartões — diferente do CashFlowChart 6m que já existe acima).
+  // Fluxo de caixa (transações comuns) dos últimos 12 meses. As faturas de
+  // cartão entram depois (cashFlow12Full) para bater com o card de Despesas
+  // do mês e com o CashFlowChart de 6 meses.
   const { data: cashFlow12 = [], isLoading: cashFlow12Loading } = useQuery({
     queryKey: ["cash-flow", scopeKey, 12],
     queryFn: () =>
       transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 12, isShared),
+    enabled: !!user,
+  });
+
+  // Gasto e aporte no cartão dos últimos 12 meses, somados ao fluxo acima.
+  const { data: cardsCashFlow12 = [] } = useQuery({
+    queryKey: ["cash-flow", "cards", scopeKey, 12],
+    queryFn: () =>
+      cardsService.getCardsCashFlow(user!.id, couple?.id ?? null, 12, isShared),
+    enabled: !!user,
+  });
+
+  const { data: cardsInvestment12 = [] } = useQuery({
+    queryKey: ["cash-flow", "cards", "investment", scopeKey, 12],
+    queryFn: () =>
+      cardsService.getCardsInvestmentCashFlow(user!.id, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
@@ -122,20 +138,37 @@ export function DashboardView() {
     enabled: !!user,
   });
 
+  // Funde o fluxo de transações com o de cartão (despesa + aporte) por mês,
+  // igual ao CashFlowChart de 6 meses. Sem isso, "Total Gasto" e o gráfico de
+  // 12 meses ignoravam as faturas — divergindo do card de Despesas do mês,
+  // que soma transações + cartão.
+  const cashFlow12Full = cashFlow12.map((d) => {
+    const cardExpense = cardsCashFlow12.find((c) => c.month === d.month)?.expense ?? 0;
+    const cardInvestment = cardsInvestment12.find((c) => c.month === d.month)?.investment ?? 0;
+    return {
+      month: d.month,
+      income: d.income,
+      expense: d.expense + cardExpense,
+      investment: d.investment + cardInvestment,
+    };
+  });
+
   // Totalizadores dos 12 meses pra cabeçalho dos cards.
-  const totalIncome12 = cashFlow12.reduce((s, d) => s + d.income, 0);
-  const totalExpense12 = cashFlow12.reduce((s, d) => s + d.expense, 0);
-  const avgSavings12 = cashFlow12.length
-    ? cashFlow12.reduce((s, d) => s + (d.income - d.expense), 0) / cashFlow12.length
+  const totalIncome12 = cashFlow12Full.reduce((s, d) => s + d.income, 0);
+  const totalExpense12 = cashFlow12Full.reduce((s, d) => s + d.expense, 0);
+  const avgSavings12 = cashFlow12Full.length
+    ? cashFlow12Full.reduce((s, d) => s + (d.income - d.expense), 0) / cashFlow12Full.length
     : 0;
   const cardYearTotal = cardYearBreakdown.reduce((s, c) => s + c.value, 0);
 
   // Aportes ("Investimento") viram uma terceira barra; a barra de despesas
   // passa a mostrar só o gasto comum (total − investimento), sem dupla
-  // contagem. Aqui não há cartão — é fluxo de transações dos 12 meses.
-  const cashFlow12Chart = cashFlow12.map((d) => ({
-    ...d,
+  // contagem.
+  const cashFlow12Chart = cashFlow12Full.map((d) => ({
+    income: d.income,
     expense: d.expense - d.investment,
+    investment: d.investment,
+    balance: d.income - d.expense,
     month: formatMonth(d.month + "-01"),
   }));
 
