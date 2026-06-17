@@ -24,7 +24,10 @@ export default function ResetPasswordPage() {
   const onSubmit = async (data: ResetPasswordInput) => {
     const supabase = createClient();
     const { error } = await supabase.auth.resetPasswordForEmail(data.email, {
-      redirectTo: `${window.location.origin}/auth/update-password`,
+      // Passa pela callback para trocar o ?code do link por uma sessão de
+      // recuperação; só então a tela /auth/update-password consegue rodar o
+      // updateUser({ password }).
+      redirectTo: `${window.location.origin}/auth/callback?next=/auth/update-password`,
     });
 
     if (error) {

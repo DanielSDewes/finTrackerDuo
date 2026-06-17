@@ -31,6 +31,10 @@ export async function updateSession(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const isAuthPage = pathname.startsWith("/auth");
   const isApiRoute = pathname.startsWith("/api");
+  // A tela de nova senha vive sob /auth, mas roda JÁ autenticada (sessão de
+  // recuperação criada pela callback). Sem esta exceção, o redirect "usuário
+  // logado em /auth → /dashboard" abaixo o expulsaria antes de trocar a senha.
+  const isUpdatePassword = pathname === "/auth/update-password";
   const isReacceptPage = pathname === "/termos/aceite";
   const isPublicPage =
     pathname === "/" ||
@@ -48,7 +52,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (user && isAuthPage) {
+  if (user && isAuthPage && !isUpdatePassword) {
     const url = request.nextUrl.clone();
     url.pathname = "/dashboard";
     return NextResponse.redirect(url);
