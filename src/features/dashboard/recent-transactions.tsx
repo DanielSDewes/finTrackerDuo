@@ -12,13 +12,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function RecentTransactions() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
 
   const { data, isLoading } = useQuery({
     queryKey: ["transactions-recent", scopeKey],
     queryFn: () =>
       transactionsService.getTransactions(
-        user!.id,
+        scopeUserId,
         couple?.id ?? null,
         {},
         { page: 1, pageSize: 5 },

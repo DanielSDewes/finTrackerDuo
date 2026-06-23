@@ -183,7 +183,8 @@ Não existe ORM (Prisma, Drizzle). Todo acesso é via PostgREST (query builder d
 │  ┌──────────────┐  ┌──────────────────────┐ │
 │  │  auth.store  │  │      ui.store        │ │
 │  │  user        │  │  selectedMonth       │ │
-│  │  couple      │  │  viewMode (ind/duo)  │ │
+│  │  couple      │  │  viewMode            │ │
+│  │              │  │   (ind/casal/parc.)  │ │
 │  │  isLoading   │  │  sidebarCollapsed    │ │
 │  └──────────────┘  └──────────────────────┘ │
 │  ┌──────────────────────────────────────┐   │
@@ -638,12 +639,18 @@ CREATE TABLE couples (
 
 ### 8.3 Modos de Visão
 
-O `useUIStore` mantém `viewMode: "individual" | "couple"`. O toggle no Header altera este valor.
+O `useUIStore` mantém `viewMode: "individual" | "couple" | "partner"`. O toggle no Header altera este valor; o `useScopeFilter` traduz para os services.
 
 Quando `viewMode === "couple"`:
 - Queries incluem `isShared = true` e filtram por `couple_id`
 - Dashboard soma receitas e despesas de ambos os usuários que marcaram `is_shared = true`
 - Novas transações/cartões têm `is_shared` ativado por padrão no formulário
+
+Quando `viewMode === "partner"` (**Ver como Parceiro**):
+- `useScopeFilter` expõe `scopeUserId = partnerId` e `readOnly = true` — a leitura passa a buscar as linhas do parceiro (como se logado como ele), e criar/editar/excluir ficam escondidos
+- Funciona nas tabelas com RLS de visibilidade do casal: `transactions`, `credit_cards`, `credit_card_bills`, `credit_card_transactions` — ou seja, dashboard, transações, cartões e buscar gastos
+- Em investimentos, metas e calendário a RLS só expõe itens compartilhados; essas telas mostram `PartnerScopeNotice` em vez de dados parciais
+- `user.id` (logado) continua valendo para escrita e checagens de ownership
 
 ### 8.4 Ownership e Isolamento
 
@@ -972,9 +979,9 @@ queryClient.invalidateQueries({ queryKey: ["cards"] });
 
 `useUIStore.selectedMonth` (formato `"YYYY-MM"`) é persistido no localStorage via Zustand persist. Ao trocar de mês, todos os componentes que dependem de `selectedMonth` re-renderizam automaticamente porque o valor do store muda.
 
-### 13.5 Toggle Individual/Casal
+### 13.5 Toggle Individual/Casal/Parceiro
 
-Disponível no header quando `couple.status === "active"`. Altera `useUIStore.viewMode`. Todas as queries que recebem `isShared` como parâmetro são automaticamente re-executadas.
+Disponível no header quando `couple.status === "active"` — controle segmentado de três opções: **Individual**, **Casal** e **Ver como Parceiro**. Altera `useUIStore.viewMode`. Todas as queries que recebem `scopeUserId`/`isShared` como parâmetro são automaticamente re-executadas (o `scopeKey` muda). Ver [seção 8.3](#83-modos-de-visão).
 
 ---
 
@@ -1249,5 +1256,5 @@ O finTrackerDuo não deve parecer um sistema financeiro corporativo. Deve parece
 ---
 
 *Documento mantido por: equipe finTrackerDuo*
-*Última atualização: Maio 2026*
+*Última atualização: Junho 2026*
 *Para contribuições: abrir PR no repositório com a seção atualizada*

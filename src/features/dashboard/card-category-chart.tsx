@@ -11,7 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CardCategoryChart() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
   const { selectedMonth } = useUIStore();
   const [year, month] = selectedMonth.split("-").map(Number);
 
@@ -19,7 +19,7 @@ export function CardCategoryChart() {
     queryKey: ["cards", "category-breakdown", scopeKey, year, month],
     queryFn: () =>
       cardsService.getCardCategoryBreakdown(
-        user!.id,
+        scopeUserId,
         couple?.id ?? null,
         month,
         year,

@@ -33,7 +33,7 @@ const CASH_FLOW_LABELS: Record<string, string> = {
 };
 
 export function DashboardView() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
   const { selectedMonth } = useUIStore();
 
   // Parse mês selecionado em números
@@ -54,7 +54,7 @@ export function DashboardView() {
   const { data: currentStats, isLoading } = useQuery({
     queryKey: ["monthly-stats", scopeKey, selectedMonth],
     queryFn: () =>
-      transactionsService.getMonthlyStats(user!.id, couple?.id ?? null, selectedMonth, isShared),
+      transactionsService.getMonthlyStats(scopeUserId, couple?.id ?? null, selectedMonth, isShared),
     enabled: !!user,
   });
 
@@ -62,7 +62,7 @@ export function DashboardView() {
   const { data: prevStats } = useQuery({
     queryKey: ["monthly-stats", scopeKey, prevMonth],
     queryFn: () =>
-      transactionsService.getMonthlyStats(user!.id, couple?.id ?? null, prevMonth, isShared),
+      transactionsService.getMonthlyStats(scopeUserId, couple?.id ?? null, prevMonth, isShared),
     enabled: !!user,
   });
 
@@ -70,7 +70,7 @@ export function DashboardView() {
   const { data: cardsSummary = [], isLoading: loadingCards } = useQuery({
     queryKey: ["cards", "summary", scopeKey, selectedMonthNum, selectedYear],
     queryFn: () =>
-      cardsService.getCardsSummary(user!.id, couple?.id ?? null, selectedMonthNum, selectedYear, isShared),
+      cardsService.getCardsSummary(scopeUserId, couple?.id ?? null, selectedMonthNum, selectedYear, isShared),
     enabled: !!user,
   });
 
@@ -78,7 +78,7 @@ export function DashboardView() {
   const { data: prevCardsSummary = [] } = useQuery({
     queryKey: ["cards", "summary", scopeKey, prevMonthNum, prevYear],
     queryFn: () =>
-      cardsService.getCardsSummary(user!.id, couple?.id ?? null, prevMonthNum, prevYear, isShared),
+      cardsService.getCardsSummary(scopeUserId, couple?.id ?? null, prevMonthNum, prevYear, isShared),
     enabled: !!user,
   });
 
@@ -89,7 +89,7 @@ export function DashboardView() {
   const { data: cashFlow12 = [], isLoading: cashFlow12Loading } = useQuery({
     queryKey: ["cash-flow", scopeKey, 12],
     queryFn: () =>
-      transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 12, isShared),
+      transactionsService.getCashFlowData(scopeUserId, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
@@ -97,14 +97,14 @@ export function DashboardView() {
   const { data: cardsCashFlow12 = [] } = useQuery({
     queryKey: ["cash-flow", "cards", scopeKey, 12],
     queryFn: () =>
-      cardsService.getCardsCashFlow(user!.id, couple?.id ?? null, 12, isShared),
+      cardsService.getCardsCashFlow(scopeUserId, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
   const { data: cardsInvestment12 = [] } = useQuery({
     queryKey: ["cash-flow", "cards", "investment", scopeKey, 12],
     queryFn: () =>
-      cardsService.getCardsInvestmentCashFlow(user!.id, couple?.id ?? null, 12, isShared),
+      cardsService.getCardsInvestmentCashFlow(scopeUserId, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
@@ -114,7 +114,7 @@ export function DashboardView() {
     queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "expense"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
-        user!.id, couple?.id ?? null, selectedMonth, "expense", isShared
+        scopeUserId, couple?.id ?? null, selectedMonth, "expense", isShared
       ),
     enabled: !!user,
   });
@@ -123,7 +123,7 @@ export function DashboardView() {
     queryKey: ["category-breakdown-report", scopeKey, selectedMonth, "income"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
-        user!.id, couple?.id ?? null, selectedMonth, "income", isShared
+        scopeUserId, couple?.id ?? null, selectedMonth, "income", isShared
       ),
     enabled: !!user,
   });
@@ -133,7 +133,7 @@ export function DashboardView() {
     queryKey: ["cards", "category-breakdown-period", scopeKey, 12],
     queryFn: () =>
       cardsService.getCardCategoryBreakdownPeriod(
-        user!.id, couple?.id ?? null, 12, isShared
+        scopeUserId, couple?.id ?? null, 12, isShared
       ),
     enabled: !!user,
   });
@@ -178,7 +178,7 @@ export function DashboardView() {
     queryKey: ["transactions-month", scopeKey, selectedMonth],
     queryFn: () =>
       transactionsService.getTransactions(
-        user!.id,
+        scopeUserId,
         couple?.id ?? null,
         { dateFrom: `${selectedMonth}-01`, dateTo: lastDayOfMonth },
         { page: 1, pageSize: 200 },

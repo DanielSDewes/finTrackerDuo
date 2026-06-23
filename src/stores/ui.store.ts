@@ -1,15 +1,19 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
+// "partner" = "Ver como Parceiro": uma lente somente-leitura que mostra os
+// dados do parceiro (como se logado como ele), em vez da consolidação do casal.
+export type ViewMode = "individual" | "couple" | "partner";
+
 type UIState = {
   sidebarCollapsed: boolean;
   sidebarMobileOpen: boolean;
   selectedMonth: string;
-  viewMode: "individual" | "couple";
+  viewMode: ViewMode;
   toggleSidebar: () => void;
   setSidebarMobileOpen: (open: boolean) => void;
   setSelectedMonth: (month: string) => void;
-  setViewMode: (mode: "individual" | "couple") => void;
+  setViewMode: (mode: ViewMode) => void;
 };
 
 const currentMonth = new Date().toISOString().slice(0, 7);

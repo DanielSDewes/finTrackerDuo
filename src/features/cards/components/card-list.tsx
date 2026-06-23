@@ -21,7 +21,7 @@ import { formatCurrency } from "@/lib/utils";
 import type { CreditCard as CreditCardType } from "../types";
 
 export function CardList() {
-  const { user, couple, scopeKey } = useScopeFilter();
+  const { user, couple, scopeKey, scopeUserId, readOnly } = useScopeFilter();
   const { partnerFirstName } = usePartner();
   const { selectedCardId, setSelectedCard } = useCardsStore();
 
@@ -31,7 +31,7 @@ export function CardList() {
 
   const { data: cards = [], isLoading } = useQuery({
     queryKey: ["cards", scopeKey],
-    queryFn: () => cardsService.getCards(user!.id, couple?.id ?? null),
+    queryFn: () => cardsService.getCards(scopeUserId, couple?.id ?? null),
     enabled: !!user,
   });
 
@@ -51,16 +51,20 @@ export function CardList() {
       <div className="flex items-center justify-between px-4 py-3 border-b border-border/50 shrink-0">
         <div className="flex items-center gap-2">
           <CreditCard className="w-4 h-4 text-primary" />
-          <h2 className="font-semibold text-sm">Meus Cartões</h2>
+          <h2 className="font-semibold text-sm">
+            {readOnly ? `Cartões de ${partnerFirstName}` : "Meus Cartões"}
+          </h2>
         </div>
-        <Button
-          size="sm"
-          onClick={() => { setEditCard(null); setFormOpen(true); }}
-          className="h-8 gap-1"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          Novo
-        </Button>
+        {!readOnly && (
+          <Button
+            size="sm"
+            onClick={() => { setEditCard(null); setFormOpen(true); }}
+            className="h-8 gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            Novo
+          </Button>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -71,13 +75,19 @@ export function CardList() {
         ) : cards.length === 0 ? (
           <EmptyState
             icon={CreditCard}
-            title="Nenhum cartão cadastrado"
-            description="Adicione seu primeiro cartão de crédito"
+            title={readOnly ? `${partnerFirstName} não tem cartões` : "Nenhum cartão cadastrado"}
+            description={
+              readOnly
+                ? "Nada para mostrar neste modo."
+                : "Adicione seu primeiro cartão de crédito"
+            }
             action={
-              <Button size="sm" onClick={() => { setEditCard(null); setFormOpen(true); }}>
-                <Plus className="w-4 h-4 mr-1" />
-                Adicionar cartão
-              </Button>
+              readOnly ? undefined : (
+                <Button size="sm" onClick={() => { setEditCard(null); setFormOpen(true); }}>
+                  <Plus className="w-4 h-4 mr-1" />
+                  Adicionar cartão
+                </Button>
+              )
             }
           />
         ) : (
@@ -149,32 +159,36 @@ export function CardList() {
                 );
               })()}
 
-              <div className="absolute top-2 right-2">
-                {card.user_id === user?.id ? (
-                  <RowActionsMenu
-                    triggerClassName="bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
-                    actions={[
-                      {
-                        label: "Editar",
-                        icon: Pencil,
-                        onClick: () => { setEditCard(card); setFormOpen(true); },
-                      },
-                      {
-                        label: "Remover",
-                        icon: Trash2,
-                        destructive: true,
-                        onClick: () => setDeleteCard(card),
-                      },
-                    ]}
-                  />
-                ) : (
-                  // Cartão do parceiro: só leitura (a RLS impede editar/excluir).
-                  <Badge className="gap-1 bg-black/30 text-white border-0 text-[10px] backdrop-blur-sm">
-                    <Users className="w-3 h-3" />
-                    {partnerFirstName}
-                  </Badge>
-                )}
-              </div>
+              {/* No modo "Ver como Parceiro" não há overlay — a lente é só
+                  leitura e o aviso global já indica de quem são os dados. */}
+              {!readOnly && (
+                <div className="absolute top-2 right-2">
+                  {card.user_id === user?.id ? (
+                    <RowActionsMenu
+                      triggerClassName="bg-black/20 hover:bg-black/40 text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                      actions={[
+                        {
+                          label: "Editar",
+                          icon: Pencil,
+                          onClick: () => { setEditCard(card); setFormOpen(true); },
+                        },
+                        {
+                          label: "Remover",
+                          icon: Trash2,
+                          destructive: true,
+                          onClick: () => setDeleteCard(card),
+                        },
+                      ]}
+                    />
+                  ) : (
+                    // Cartão do parceiro: só leitura (a RLS impede editar/excluir).
+                    <Badge className="gap-1 bg-black/30 text-white border-0 text-[10px] backdrop-blur-sm">
+                      <Users className="w-3 h-3" />
+                      {partnerFirstName}
+                    </Badge>
+                  )}
+                </div>
+              )}
             </div>
           ))
         )}

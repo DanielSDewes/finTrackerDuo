@@ -3,10 +3,11 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock, User, Users } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { usePartner } from "@/hooks/use-partner";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { CardTransactionForm } from "./transaction-form";
@@ -26,18 +27,61 @@ import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
 
+// Modo de filtro da lista (toggle exclusivo).
+type FilterMode = "all" | "forecast" | "installment" | "mine" | "mine-installment";
+
 type DeleteTarget =
   | { type: "single"; tx: CreditCardTransaction }
   | { type: "group"; groupId: string; title: string };
 
+/**
+ * Visão consolidada: une as duas metades de um lançamento dividido com o casal
+ * (mesmo `shared_group_id`) em uma única linha com o valor cheio. Lançamentos
+ * normais passam direto. A ordenação espelha a do service (data desc, depois
+ * created_at desc). As previsões já são removidas antes de chamar isto.
+ */
+function consolidateTransactions(txs: CreditCardTransaction[]): CreditCardTransaction[] {
+  const merged: CreditCardTransaction[] = [];
+  const groups = new Map<string, CreditCardTransaction[]>();
+
+  for (const t of txs) {
+    if (t.is_shared && t.shared_group_id) {
+      const arr = groups.get(t.shared_group_id);
+      if (arr) arr.push(t);
+      else groups.set(t.shared_group_id, [t]);
+    } else {
+      merged.push(t);
+    }
+  }
+
+  for (const group of groups.values()) {
+    const base = group[0];
+    merged.push({
+      ...base,
+      amount: group.reduce((s, t) => s + t.amount, 0),
+      // O registro unido só conta como reembolsado se as duas metades forem.
+      is_reimbursed: group.every((t) => t.is_reimbursed),
+    });
+  }
+
+  merged.sort((a, b) =>
+    a.date !== b.date
+      ? a.date < b.date ? 1 : -1
+      : a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
+  );
+  return merged;
+}
+
 export function BillDetail() {
   const { selectedCardId, selectedBillId, selectedBillMonth, selectedBillYear } = useCardsStore();
   const { user, couple } = useAuthStore();
+  const { readOnly } = useScopeFilter();
   const { partnerFirstName } = usePartner();
   const queryClient = useQueryClient();
 
   const [search, setSearch] = useState("");
-  const [filterMode, setFilterMode] = useState<"all" | "forecast" | "installment">("all");
+  const [filterMode, setFilterMode] = useState<FilterMode>("all");
+  const [viewMode, setViewMode] = useState<"detailed" | "consolidated">("detailed");
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CreditCardTransaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -126,29 +170,55 @@ export function BillDetail() {
     );
   }
 
-  // Filtros aplicados em sequência: primeiro o modo (todos / só previsões /
-  // só parcelados) e depois a busca textual no título.
-  const filtered = transactions
-    .filter((t) => {
-      if (filterMode === "forecast") return t.is_forecast;
-      if (filterMode === "installment") return t.is_installment;
-      return true;
-    })
-    .filter((t) => t.title.toLowerCase().includes(search.toLowerCase()));
+  const hasCouple = couple?.status === "active";
 
-  // Contagens auxiliares para mostrar nos chips do filtro.
+  // Contagens auxiliares para os chips de filtro.
   const forecastCount = transactions.filter((t) => t.is_forecast).length;
   const installmentCount = transactions.filter((t) => t.is_installment).length;
+  const mineCount = user ? transactions.filter((t) => t.user_id === user.id).length : 0;
+  const mineInstallmentCount = user
+    ? transactions.filter((t) => t.user_id === user.id && t.is_installment).length
+    : 0;
+  const hasSplit = transactions.some((t) => t.is_shared && !!t.shared_group_id);
 
+  // A visão consolidada só difere da detalhada quando há previsões a esconder
+  // ou lançamentos divididos a unir. Sem isso, nem oferecemos o toggle.
+  const canConsolidate = forecastCount > 0 || hasSplit;
+  const consolidated = viewMode === "consolidated" && canConsolidate;
+
+  // Lista base conforme o modo. Consolidada: sem previsões e com os splits do
+  // casal unidos. Detalhada: aplica o filtro exclusivo selecionado.
+  const baseList = consolidated
+    ? consolidateTransactions(transactions.filter((t) => !t.is_forecast))
+    : transactions.filter((t) => {
+        if (filterMode === "forecast") return t.is_forecast;
+        if (filterMode === "installment") return t.is_installment;
+        if (filterMode === "mine") return t.user_id === user?.id;
+        if (filterMode === "mine-installment")
+          return t.user_id === user?.id && t.is_installment;
+        return true;
+      });
+
+  // Busca textual no título, sempre por último.
+  const filtered = baseList.filter((t) =>
+    t.title.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  // Total exibido no header: detalhada inclui previsões; consolidada não.
   const total = transactions
     .filter((t) => !t.is_reimbursed)
+    .reduce((s, t) => s + t.amount, 0);
+  const consolidatedTotal = transactions
+    .filter((t) => !t.is_forecast && !t.is_reimbursed)
     .reduce((s, t) => s + t.amount, 0);
   const myTotal = user
     ? transactions
         .filter((t) => t.user_id === user.id && !t.is_reimbursed)
         .reduce((s, t) => s + t.amount, 0)
     : total;
-  const hasCouple = couple?.status === "active";
+
+  const displayCount = consolidated ? baseList.length : transactions.length;
+  const displayTotal = consolidated ? consolidatedTotal : total;
 
   // Status atual da fatura — usa o activeBill (derivado por mês/ano) ao
   // invés de selectedBillId para sobreviver a cleanups + recriações.
@@ -170,21 +240,23 @@ export function BillDetail() {
               {MONTHS_PT[selectedBillMonth - 1]} {selectedBillYear}
             </h2>
             <p className="text-xs text-muted-foreground">
-              {transactions.length} lançamento{transactions.length !== 1 ? "s" : ""} •{" "}
+              {displayCount} lançamento{displayCount !== 1 ? "s" : ""} •{" "}
               <span className="font-semibold text-foreground">
-                {formatCurrency(total)}
+                {formatCurrency(displayTotal)}
               </span>
-              {hasCouple && myTotal !== total && (
+              {consolidated ? (
+                <> •{" "}<span className="text-muted-foreground">sem previsões</span></>
+              ) : hasCouple && myTotal !== total ? (
                 <> •{" "}
                   <span className="font-semibold text-primary">
                     sua parte {formatCurrency(myTotal)}
                   </span>
                 </>
-              )}
+              ) : null}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {activeBill && (
+            {activeBill && !readOnly && (
               <Select
                 value={currentStatus}
                 onValueChange={(v) =>
@@ -206,16 +278,23 @@ export function BillDetail() {
                 </SelectContent>
               </Select>
             )}
-            <Button
-              size="sm"
-              className="h-7 gap-1 text-xs"
-              onClick={() => setFormOpen(true)}
-              disabled={isBillLocked}
-              title={isBillLocked ? `Fatura ${lockedLabel} — reabra para lançar` : undefined}
-            >
-              {isBillLocked ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-              Lançar
-            </Button>
+            {activeBill && readOnly && (
+              <Badge variant="outline" className="h-7 px-2 text-xs">
+                {BILL_STATUS_META[currentStatus].label}
+              </Badge>
+            )}
+            {!readOnly && (
+              <Button
+                size="sm"
+                className="h-7 gap-1 text-xs"
+                onClick={() => setFormOpen(true)}
+                disabled={isBillLocked}
+                title={isBillLocked ? `Fatura ${lockedLabel} — reabra para lançar` : undefined}
+              >
+                {isBillLocked ? <Lock className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                Lançar
+              </Button>
+            )}
           </div>
         </div>
 
@@ -229,10 +308,41 @@ export function BillDetail() {
           />
         </div>
 
-        {/* Filtros: Todos / Só previsões / Só parcelados. Aparecem só quando
-            há pelo menos um lançamento dos dois tipos na fatura. */}
-        {(forecastCount > 0 || installmentCount > 0) && (
-          <div className="flex gap-1 text-[11px]">
+        {/* Visão: Detalhada (padrão) ou Consolidada (sem previsões + lançamentos
+            divididos com o casal unidos em um só). Só aparece quando há o que
+            consolidar. */}
+        {canConsolidate && (
+          <div className="flex items-center gap-1.5 text-[11px]">
+            <span className="text-muted-foreground uppercase tracking-wide mr-0.5">
+              Visão
+            </span>
+            <Button
+              type="button"
+              variant={!consolidated ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-3 text-xs"
+              onClick={() => setViewMode("detailed")}
+            >
+              Detalhada
+            </Button>
+            <Button
+              type="button"
+              variant={consolidated ? "default" : "outline"}
+              size="sm"
+              className="h-7 px-3 text-xs gap-1"
+              onClick={() => setViewMode("consolidated")}
+            >
+              <Users className="w-3 h-3" />
+              Consolidada
+            </Button>
+          </div>
+        )}
+
+        {/* Filtros (só na visão detalhada): Todos / Previsão / Parceladas e, no
+            casal, Minhas transações / Minhas parcelas. */}
+        {!consolidated &&
+          (forecastCount > 0 || installmentCount > 0 || (hasCouple && mineCount > 0)) && (
+          <div className="flex gap-1 text-[11px] flex-wrap">
             <FilterChip
               label="Todos"
               count={transactions.length}
@@ -260,6 +370,28 @@ export function BillDetail() {
                 tone="primary"
                 onClick={() =>
                   setFilterMode(filterMode === "installment" ? "all" : "installment")
+                }
+              />
+            )}
+            {hasCouple && mineCount > 0 && (
+              <FilterChip
+                icon={<User className="w-2.5 h-2.5" />}
+                label="Minhas transações"
+                count={mineCount}
+                active={filterMode === "mine"}
+                tone="primary"
+                onClick={() => setFilterMode(filterMode === "mine" ? "all" : "mine")}
+              />
+            )}
+            {hasCouple && mineInstallmentCount > 0 && (
+              <FilterChip
+                icon={<Layers className="w-2.5 h-2.5" />}
+                label="Minhas parcelas"
+                count={mineInstallmentCount}
+                active={filterMode === "mine-installment"}
+                tone="primary"
+                onClick={() =>
+                  setFilterMode(filterMode === "mine-installment" ? "all" : "mine-installment")
                 }
               />
             )}
@@ -295,19 +427,25 @@ export function BillDetail() {
             <p className="text-sm text-muted-foreground">
               {search
                 ? "Nenhum resultado encontrado"
+                : consolidated
+                ? "Nenhum lançamento realizado nesta fatura"
                 : filterMode === "forecast"
                 ? "Nenhuma previsão nesta fatura"
                 : filterMode === "installment"
                 ? "Nenhuma parcela nesta fatura"
+                : filterMode === "mine"
+                ? "Nenhuma transação sua nesta fatura"
+                : filterMode === "mine-installment"
+                ? "Nenhuma parcela sua nesta fatura"
                 : "Nenhum lançamento nesta fatura"}
             </p>
-            {!search && filterMode === "all" && !isBillLocked && (
+            {!readOnly && !search && (consolidated || filterMode === "all") && !isBillLocked && (
               <Button size="sm" variant="outline" onClick={() => setFormOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" />
                 Adicionar lançamento
               </Button>
             )}
-            {filterMode !== "all" && (
+            {!consolidated && filterMode !== "all" && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -332,6 +470,8 @@ export function BillDetail() {
               currentUserId={user?.id ?? ""}
               partnerFirstName={partnerFirstName}
               hasCouple={hasCouple}
+              consolidated={consolidated}
+              readOnly={readOnly}
             />
           ))
         )}
@@ -454,6 +594,8 @@ function TransactionRow({
   currentUserId,
   partnerFirstName,
   hasCouple,
+  consolidated = false,
+  readOnly = false,
 }: {
   tx: CreditCardTransaction;
   onEdit: (tx: CreditCardTransaction) => void;
@@ -463,6 +605,12 @@ function TransactionRow({
   currentUserId: string;
   partnerFirstName: string;
   hasCouple: boolean;
+  /** Visão consolidada: linha somente leitura; o badge de dono some nos
+   *  lançamentos divididos (que aqui aparecem unidos). */
+  consolidated?: boolean;
+  /** Modo "Ver como Parceiro": linha somente leitura (esconde o menu de ações),
+   *  mas mantém os badges de dono. */
+  readOnly?: boolean;
 }) {
   const isOwner = tx.user_id === currentUserId;
   const isLastInstallment = tx.is_installment && tx.is_last_installment;
@@ -533,7 +681,7 @@ function TransactionRow({
               reembolsado
             </Badge>
           )}
-          {hasCouple && (
+          {hasCouple && !(consolidated && tx.is_shared) && (
             <Badge
               variant={isOwner ? "default" : "secondary"}
               className="text-[10px] px-1.5 py-0 h-4 shrink-0"
@@ -562,6 +710,7 @@ function TransactionRow({
         {formatCurrency(tx.amount)}
       </p>
 
+      {!consolidated && !readOnly && (
       <RowActionsMenu
         actions={[
           {
@@ -613,6 +762,7 @@ function TransactionRow({
             : []),
         ]}
       />
+      )}
     </div>
   );
 }

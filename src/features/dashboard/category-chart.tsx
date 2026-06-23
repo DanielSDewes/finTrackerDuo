@@ -13,7 +13,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export function CategoryChart() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
   const { selectedMonth } = useUIStore();
   const [year, monthNum] = selectedMonth.split("-").map(Number);
 
@@ -21,7 +21,7 @@ export function CategoryChart() {
     queryKey: ["category-breakdown", scopeKey, selectedMonth, "expense"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
-        user!.id, couple?.id ?? null, selectedMonth, "expense", isShared
+        scopeUserId, couple?.id ?? null, selectedMonth, "expense", isShared
       ),
     enabled: !!user,
   });
@@ -30,7 +30,7 @@ export function CategoryChart() {
     queryKey: ["category-breakdown", "cards", scopeKey, selectedMonth],
     queryFn: () =>
       cardsService.getCardCategoryBreakdown(
-        user!.id, couple?.id ?? null, monthNum, year, isShared
+        scopeUserId, couple?.id ?? null, monthNum, year, isShared
       ),
     enabled: !!user,
   });
@@ -39,7 +39,7 @@ export function CategoryChart() {
     queryKey: ["category-breakdown", scopeKey, selectedMonth, "income"],
     queryFn: () =>
       transactionsService.getCategoryBreakdown(
-        user!.id, couple?.id ?? null, selectedMonth, "income", isShared
+        scopeUserId, couple?.id ?? null, selectedMonth, "income", isShared
       ),
     enabled: !!user,
   });

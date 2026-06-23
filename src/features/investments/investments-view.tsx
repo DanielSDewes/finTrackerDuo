@@ -11,6 +11,7 @@ import {
 import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { investmentsService } from "@/services/investments.service";
+import { transactionsService } from "@/services/transactions.service";
 import { formatCurrency, formatPercent, formatNumber, CHART_COLORS } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -26,6 +27,8 @@ import { DividendsDashboard } from "./dividends-dashboard";
 import { PortfolioTable } from "./portfolio-table";
 import { OperationsReport } from "./operations-report";
 import { PlanningSection } from "./planning-section";
+import { WealthProjection } from "./wealth-projection";
+import { PartnerScopeNotice } from "@/components/shared/partner-scope-notice";
 import type { Investment, AssetClass } from "@/types";
 
 const assetClassLabels: Record<string, string> = {
@@ -37,7 +40,7 @@ const assetClassLabels: Record<string, string> = {
 };
 
 export function InvestmentsView() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, isPartnerView } = useScopeFilter();
 
   const [formOpen, setFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -48,6 +51,15 @@ export function InvestmentsView() {
   const { data: summary, isLoading } = useQuery({
     queryKey: ["investment-summary", scopeKey],
     queryFn: () => investmentsService.getPortfolioSummary(user!.id, couple?.id, isShared),
+    enabled: !!user,
+  });
+
+  // Aportes já agendados para os próximos meses (despesas futuras na categoria
+  // "Investimento") — alimentam o aporte mensal da projeção de patrimônio.
+  const { data: upcomingContributions } = useQuery({
+    queryKey: ["upcoming-investment-contributions", scopeKey],
+    queryFn: () =>
+      transactionsService.getUpcomingInvestmentContributions(user!.id, couple?.id ?? null, 12, isShared),
     enabled: !!user,
   });
 
@@ -143,6 +155,15 @@ export function InvestmentsView() {
       bg: "bg-info/10",
     },
   ];
+
+  if (isPartnerView) {
+    return (
+      <div>
+        <Header title="Investimentos" subtitle="Acompanhe seu portfólio de investimentos" />
+        <PartnerScopeNotice noun="Os investimentos" />
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -295,6 +316,15 @@ export function InvestmentsView() {
             </Card>
           </div>
         )}
+
+        {/* Projeção de patrimônio */}
+        <WealthProjection
+          investments={investments}
+          totalCurrent={totalCurrent}
+          suggestedContribution={upcomingContributions?.monthlyAverage ?? 0}
+          upcomingMonths={upcomingContributions?.months.length ?? 0}
+          isLoading={isLoading}
+        />
 
         {/* Dashboard de proventos */}
         <DividendsDashboard totalInvested={totalInvested} totalCurrent={totalCurrent} />

@@ -39,10 +39,12 @@ function sanitizeTerm(term: string): string {
 
 export const spendSearchService = {
   /**
-   * Busca gastos por descrição cruzando transações comuns (tipo despesa) e
-   * lançamentos de cartão, dentro de um período. Retorna os itens e os totais
-   * separados por origem. Considera apenas gasto "realizado": ignora
-   * transações canceladas e, no cartão, previsões e reembolsos.
+   * Busca gastos cruzando transações comuns (tipo despesa) e lançamentos de
+   * cartão, dentro de um período. Filtra por descrição (`term`), por categoria
+   * (`categoryId`) ou por ambos — pelo menos um dos dois precisa estar
+   * presente. Retorna os itens e os totais separados por origem. Considera
+   * apenas gasto "realizado": ignora transações canceladas e, no cartão,
+   * previsões e reembolsos.
    *
    * Escopo individual/casal espelha os demais services: transações usam o
    * applyScopeFilter consolidado; cartões filtram por user_id no individual e
@@ -52,12 +54,14 @@ export const spendSearchService = {
     userId: string,
     coupleId: string | null,
     term: string,
+    categoryId: string | null,
     dateFrom: string,
     dateTo: string,
     isShared = false,
   ): Promise<SpendSearchResult> {
     const safeTerm = sanitizeTerm(term);
-    if (!safeTerm) return EMPTY;
+    // Sem termo nem categoria não há o que buscar.
+    if (!safeTerm && !categoryId) return EMPTY;
 
     const supabase = createClient();
     const pattern = `%${safeTerm}%`;
@@ -70,8 +74,9 @@ export const spendSearchService = {
       .eq("type", "expense")
       .neq("status", "cancelled")
       .gte("date", dateFrom)
-      .lte("date", dateTo)
-      .ilike("description", pattern);
+      .lte("date", dateTo);
+    if (safeTerm) txQuery = txQuery.ilike("description", pattern);
+    if (categoryId) txQuery = txQuery.eq("category_id", categoryId);
     txQuery = applyScopeFilter(txQuery, {
       userId,
       coupleId,
@@ -89,8 +94,9 @@ export const spendSearchService = {
       .eq("is_reimbursed", false)
       .eq("is_forecast", false)
       .gte("date", dateFrom)
-      .lte("date", dateTo)
-      .or(`title.ilike.${pattern},description.ilike.${pattern}`);
+      .lte("date", dateTo);
+    if (safeTerm) cardQuery = cardQuery.or(`title.ilike.${pattern},description.ilike.${pattern}`);
+    if (categoryId) cardQuery = cardQuery.eq("category_id", categoryId);
     if (!(isShared && coupleId)) cardQuery = cardQuery.eq("user_id", userId);
 
     const [txRes, cardRes] = await Promise.all([txQuery, cardQuery]);

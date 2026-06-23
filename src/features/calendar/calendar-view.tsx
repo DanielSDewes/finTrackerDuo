@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { EmptyState } from "@/components/shared/empty-state";
+import { PartnerScopeNotice } from "@/components/shared/partner-scope-notice";
 import { EventForm } from "./event-form";
 import type { CalendarEvent, Transaction } from "@/types";
 
@@ -32,7 +33,7 @@ function fmtTime(time: string | null): string | null {
 }
 
 export function CalendarView() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, isPartnerView } = useScopeFilter();
   const { selectedMonth } = useUIStore();
 
   const today = new Date().toISOString().split("T")[0];
@@ -115,6 +116,15 @@ export function CalendarView() {
   });
 
   const selectedLabel = formatDate(activeDate, "EEEE, dd 'de' MMMM");
+
+  if (isPartnerView) {
+    return (
+      <div>
+        <Header title="Calendário" subtitle="Sua agenda de eventos e compromissos" />
+        <PartnerScopeNotice noun="A agenda" />
+      </div>
+    );
+  }
 
   return (
     <div>

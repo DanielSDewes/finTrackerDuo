@@ -11,6 +11,7 @@ import {
 import { useAuthStore } from "@/stores/auth.store";
 import { useUIStore } from "@/stores/ui.store";
 import { usePartner } from "@/hooks/use-partner";
+import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { transactionsService } from "@/services/transactions.service";
 import { cardsService } from "@/features/cards/services/cards.service";
@@ -47,9 +48,11 @@ interface TransactionRowProps {
   onEdit: (t: Transaction) => void;
   onDelete: (id: string) => void;
   onDeleteGroup: (t: Transaction) => void;
+  /** Modo "Ver como Parceiro": esconde o menu de ações (lente só leitura). */
+  readOnly?: boolean;
 }
 
-function TransactionRow({ transaction: tx, type, onEdit, onDelete, onDeleteGroup }: TransactionRowProps) {
+function TransactionRow({ transaction: tx, type, onEdit, onDelete, onDeleteGroup, readOnly = false }: TransactionRowProps) {
   const statusVariants: Record<string, "success" | "warning" | "outline"> = {
     completed: "success",
     pending: "warning",
@@ -106,21 +109,23 @@ function TransactionRow({ transaction: tx, type, onEdit, onDelete, onDeleteGroup
           {type === "income" ? "+" : "-"}{formatCurrency(tx.amount)}
         </p>
 
-        <RowActionsMenu
-          triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
-          actions={[
-            { label: "Editar", icon: Pencil, onClick: () => onEdit(tx) },
-            { label: "Excluir", icon: Trash2, destructive: true, onClick: () => onDelete(tx.id) },
-            ...(tx.is_installment && tx.installment_group_id
-              ? [{
-                  label: "Excluir parcelamento",
-                  icon: Trash2,
-                  destructive: true,
-                  onClick: () => onDeleteGroup(tx),
-                }]
-              : []),
-          ]}
-        />
+        {!readOnly && (
+          <RowActionsMenu
+            triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
+            actions={[
+              { label: "Editar", icon: Pencil, onClick: () => onEdit(tx) },
+              { label: "Excluir", icon: Trash2, destructive: true, onClick: () => onDelete(tx.id) },
+              ...(tx.is_installment && tx.installment_group_id
+                ? [{
+                    label: "Excluir parcelamento",
+                    icon: Trash2,
+                    destructive: true,
+                    onClick: () => onDeleteGroup(tx),
+                  }]
+                : []),
+            ]}
+          />
+        )}
       </div>
     </motion.div>
   );
@@ -157,6 +162,9 @@ export function TransactionsView() {
   const { user, couple } = useAuthStore();
   const { selectedMonth, setSelectedMonth } = useUIStore();
   const { partner, partnerId } = usePartner();
+  // Modo global "Ver como Parceiro": força a visão do parceiro em só leitura,
+  // sobrepondo (e escondendo) o toggle local desta tela.
+  const { isPartnerView, readOnly } = useScopeFilter();
 
   const [viewingPartner, setViewingPartner] = useState(false);
   const [formOpen, setFormOpen] = useState(false);
@@ -174,8 +182,12 @@ export function TransactionsView() {
   const [year, monthNum] = selectedMonth.split("-").map(Number);
   const lastDay = new Date(Date.UTC(year, monthNum, 0)).toISOString().split("T")[0];
 
+  // Visão do parceiro: pelo modo global (só leitura) OU pelo toggle local
+  // (leitura+escrita, quando não está no modo global). No modo global ignoramos
+  // o toggle local para evitar conflito.
+  const effectiveViewingPartner = isPartnerView || (viewingPartner && !isPartnerView);
   // When viewing partner, query their userId instead of ours
-  const activeUserId = viewingPartner && partnerId ? partnerId : (user?.id ?? "");
+  const activeUserId = effectiveViewingPartner && partnerId ? partnerId : (user?.id ?? "");
 
   const { data, isLoading } = useQuery({
     queryKey: ["transactions", activeUserId, couple?.id, selectedMonth],
@@ -264,7 +276,7 @@ export function TransactionsView() {
       <Header
         title="Transações"
         subtitle={
-          viewingPartner && partner
+          effectiveViewingPartner && partner
             ? `Transações de ${partner.name}`
             : "Gerencie suas movimentações financeiras por mês"
         }
@@ -283,8 +295,9 @@ export function TransactionsView() {
               />
             </div>
 
-            {/* Partner view toggle */}
-            {partnerId && (
+            {/* Partner view toggle — escondido no modo global "Ver como
+                Parceiro", que já força a visão do parceiro (só leitura). */}
+            {partnerId && !isPartnerView && (
               <Button
                 variant={viewingPartner ? "default" : "outline"}
                 size="sm"
@@ -303,41 +316,43 @@ export function TransactionsView() {
             )}
           </div>
 
-          <Dialog
-            open={formOpen}
-            onOpenChange={(open) => {
-              setFormOpen(open);
-              if (!open) setEditingTransaction(null);
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button onClick={() => setEditingTransaction(null)}>
-                <Plus className="w-4 h-4" />
-                Nova transação
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
-              <DialogHeader>
-                <DialogTitle>
-                  {editingTransaction ? "Editar transação" : "Nova transação"}
-                  {viewingPartner && partner && (
-                    <span className="ml-2 text-sm font-normal text-muted-foreground">
-                      — {partner.name}
-                    </span>
-                  )}
-                </DialogTitle>
-              </DialogHeader>
-              <TransactionForm
-                transaction={editingTransaction}
-                partnerId={partnerId ?? undefined}
-                isPartnerForm={viewingPartner}
-                onSuccess={() => {
-                  setFormOpen(false);
-                  setEditingTransaction(null);
-                }}
-              />
-            </DialogContent>
-          </Dialog>
+          {!readOnly && (
+            <Dialog
+              open={formOpen}
+              onOpenChange={(open) => {
+                setFormOpen(open);
+                if (!open) setEditingTransaction(null);
+              }}
+            >
+              <DialogTrigger asChild>
+                <Button onClick={() => setEditingTransaction(null)}>
+                  <Plus className="w-4 h-4" />
+                  Nova transação
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingTransaction ? "Editar transação" : "Nova transação"}
+                    {viewingPartner && partner && (
+                      <span className="ml-2 text-sm font-normal text-muted-foreground">
+                        — {partner.name}
+                      </span>
+                    )}
+                  </DialogTitle>
+                </DialogHeader>
+                <TransactionForm
+                  transaction={editingTransaction}
+                  partnerId={partnerId ?? undefined}
+                  isPartnerForm={viewingPartner}
+                  onSuccess={() => {
+                    setFormOpen(false);
+                    setEditingTransaction(null);
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
 
         {/* Filtro por status */}
@@ -525,6 +540,7 @@ export function TransactionsView() {
                             onEdit={handleEdit}
                             onDelete={setDeleteId}
                             onDeleteGroup={setDeleteGroupTarget}
+                            readOnly={readOnly}
                           />
                         ))}
                       </div>
@@ -621,6 +637,7 @@ export function TransactionsView() {
                             onEdit={handleEdit}
                             onDelete={setDeleteId}
                             onDeleteGroup={setDeleteGroupTarget}
+                            readOnly={readOnly}
                           />
                         ))}
                       </div>

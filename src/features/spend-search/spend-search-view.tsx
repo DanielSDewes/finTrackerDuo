@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, CreditCard, Receipt, Loader2 } from "lucide-react";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
+import { categoriesService } from "@/services/categories.service";
 import { spendSearchService } from "./spend-search.service";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
@@ -13,7 +14,14 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { EmptyState } from "@/components/shared/empty-state";
+
+// Valor sentinela do Select para "qualquer categoria" — o Radix não aceita
+// item com value vazio.
+const ALL_CATEGORIES = "all";
 
 function toISODate(d: Date): string {
   return d.toISOString().slice(0, 10);
@@ -64,47 +72,90 @@ const PRESETS: Preset[] = [
 ];
 
 export function SpendSearchView() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
 
   const initial = defaultRange();
   const [term, setTerm] = useState("");
+  const [categoryId, setCategoryId] = useState<string>(ALL_CATEGORIES);
   const [dateFrom, setDateFrom] = useState(initial.from);
   const [dateTo, setDateTo] = useState(initial.to);
 
+  // Categorias usadas em transações e/ou no cartão — mesma lista da tela de
+  // cadastro, já que a busca cruza as duas origens.
+  const { data: categories } = useQuery({
+    queryKey: ["categories", "all", user?.id, couple?.id],
+    queryFn: () => categoriesService.getCategories(user!.id, couple?.id),
+    enabled: !!user,
+  });
+
   // Consulta efetivamente aplicada (set no submit). Mantém a busca separada da
   // digitação, evitando disparar a query a cada tecla.
-  const [applied, setApplied] = useState<{ term: string; from: string; to: string } | null>(null);
+  const [applied, setApplied] = useState<{
+    term: string;
+    categoryId: string | null;
+    categoryName: string | null;
+    from: string;
+    to: string;
+  } | null>(null);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["spend-search", scopeKey, applied?.term, applied?.from, applied?.to],
+    queryKey: ["spend-search", scopeKey, applied?.term, applied?.categoryId, applied?.from, applied?.to],
     queryFn: () =>
       spendSearchService.searchSpend(
-        user!.id,
+        scopeUserId,
         couple?.id ?? null,
         applied!.term,
+        applied!.categoryId,
         applied!.from,
         applied!.to,
         isShared,
       ),
-    enabled: !!user && !!applied && applied.term.trim().length > 0,
+    enabled:
+      !!user && !!applied && (applied.term.trim().length > 0 || !!applied.categoryId),
   });
+
+  // Monta o filtro aplicado a partir do estado atual, resolvendo o nome da
+  // categoria para exibição. Retorna null quando não há critério algum.
+  const buildApplied = (from: string, to: string) => {
+    const trimmed = term.trim();
+    const catId = categoryId === ALL_CATEGORIES ? null : categoryId;
+    if (!trimmed && !catId) return null;
+    return {
+      term: trimmed,
+      categoryId: catId,
+      categoryName: catId ? categories?.find((c) => c.id === catId)?.name ?? null : null,
+      from,
+      to,
+    };
+  };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!term.trim()) return;
-    setApplied({ term: term.trim(), from: dateFrom, to: dateTo });
+    const next = buildApplied(dateFrom, dateTo);
+    if (next) setApplied(next);
   };
 
   const applyPreset = (preset: Preset) => {
     const { from, to } = preset.range();
     setDateFrom(from);
     setDateTo(to);
-    // Se já existe um termo, re-aplica imediatamente com o novo período.
-    if (term.trim()) setApplied({ term: term.trim(), from, to });
+    // Se já existe um critério, re-aplica imediatamente com o novo período.
+    const next = buildApplied(from, to);
+    if (next) setApplied(next);
   };
 
   const hasResults = !!data && data.items.length > 0;
   const searching = isLoading || isFetching;
+  const canSearch = !!term.trim() || categoryId !== ALL_CATEGORIES;
+
+  // Descreve o filtro aplicado para os títulos ("termo", categoria ou ambos).
+  const appliedLabel = !applied
+    ? ""
+    : applied.term && applied.categoryName
+      ? `“${applied.term}” em ${applied.categoryName}`
+      : applied.term
+        ? `“${applied.term}”`
+        : applied.categoryName ?? "";
 
   return (
     <div>
@@ -131,6 +182,22 @@ export function SpendSearchView() {
                   />
                 </div>
                 <div className="space-y-1.5">
+                  <Label htmlFor="category">Categoria</Label>
+                  <Select value={categoryId} onValueChange={setCategoryId}>
+                    <SelectTrigger id="category" className="lg:w-48">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={ALL_CATEGORIES}>Todas as categorias</SelectItem>
+                      {categories?.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.id}>
+                          {cat.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
                   <Label htmlFor="from">De</Label>
                   <Input
                     id="from"
@@ -152,7 +219,7 @@ export function SpendSearchView() {
                     className="sm:w-40"
                   />
                 </div>
-                <Button type="submit" disabled={!term.trim() || searching} className="shrink-0">
+                <Button type="submit" disabled={!canSearch || searching} className="shrink-0">
                   {searching ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
                   ) : (
@@ -189,8 +256,8 @@ export function SpendSearchView() {
           <EmptyState
             icon={Search}
             variant="full"
-            title="Informe um termo e um período"
-            description="A busca soma o que você gastou com esse termo em transações e no cartão."
+            title="Informe um termo ou uma categoria"
+            description="Busque por texto, por categoria ou pelos dois — somamos o que você gastou em transações e no cartão no período."
           />
         ) : searching ? (
           <div className="space-y-4">
@@ -201,8 +268,8 @@ export function SpendSearchView() {
           <EmptyState
             icon={Search}
             variant="full"
-            title={`Nenhum gasto encontrado para "${applied.term}"`}
-            description="Tente outro termo ou amplie o período."
+            title={`Nenhum gasto encontrado para ${appliedLabel}`}
+            description="Tente outro termo, outra categoria ou amplie o período."
           />
         ) : (
           <>
@@ -212,7 +279,7 @@ export function SpendSearchView() {
                 <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4">
                   <div>
                     <p className="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
-                      Total com &ldquo;{applied.term}&rdquo;
+                      Total com {appliedLabel}
                     </p>
                     <p className="text-3xl font-bold text-[hsl(var(--expense))] tabular-nums">
                       {formatCurrency(data.total)}

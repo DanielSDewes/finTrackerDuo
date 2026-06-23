@@ -486,6 +486,63 @@ export const transactionsService = {
     return results;
   },
 
+  /**
+   * Aportes planejados para os próximos meses: despesas futuras (data > hoje)
+   * na categoria "Investimento", agrupadas por mês. Como as recorrentes são
+   * replicadas fisicamente para os meses à frente, isso reflete o quanto o
+   * usuário já tem agendado para investir. Alimenta a projeção de patrimônio.
+   *
+   * `monthlyAverage` divide o total pelos meses que efetivamente têm aporte —
+   * representa o aporte mensal típico, ignorando meses vazios.
+   */
+  async getUpcomingInvestmentContributions(
+    userId: string,
+    coupleId: string | null,
+    monthsAhead = 12,
+    isShared = false,
+  ): Promise<{ total: number; months: { month: string; total: number }[]; monthlyAverage: number }> {
+    const supabase = createClient();
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10);
+    // Fim do mês a `monthsAhead` meses à frente (UTC, como nos demais cálculos).
+    const horizonEnd = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + monthsAhead + 1, 0),
+    )
+      .toISOString()
+      .slice(0, 10);
+
+    let query = supabase
+      .from("transactions")
+      .select("amount, date, category:categories(name)")
+      .is("deleted_at", null)
+      .eq("type", "expense")
+      .neq("status", "cancelled")
+      .gt("date", todayStr)
+      .lte("date", horizonEnd);
+
+    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple: true });
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    type Row = { amount: number; date: string; category: { name: string } | null };
+
+    const byMonth = new Map<string, number>();
+    for (const t of (data ?? []) as unknown as Row[]) {
+      if (!isInvestmentCategoryName(t.category?.name)) continue;
+      const month = t.date.slice(0, 7);
+      byMonth.set(month, (byMonth.get(month) ?? 0) + t.amount);
+    }
+
+    const months = Array.from(byMonth.entries())
+      .map(([month, total]) => ({ month, total }))
+      .sort((a, b) => (a.month < b.month ? -1 : 1));
+    const total = months.reduce((s, m) => s + m.total, 0);
+    const monthlyAverage = months.length > 0 ? total / months.length : 0;
+
+    return { total, months, monthlyAverage };
+  },
+
   async getCategoryBreakdown(userId: string, coupleId: string | null, month: string, type: "income" | "expense", isShared = false) {
     const supabase = createClient();
     const startDate = `${month}-01`;

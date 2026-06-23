@@ -3,7 +3,7 @@
 # FinTrackerDuo
 
 **Plataforma financeira moderna para indivíduos e casais.**
-Visão consolidada, cartões com faturas reais, metas com sub-itens, investimentos e relatórios — em uma única interface, com escopo "Individual" ou "Casal" alternável a qualquer momento.
+Visão consolidada, cartões com faturas reais, metas com sub-itens, investimentos e relatórios — em uma única interface, com escopo **Individual**, **Casal** ou **Ver como Parceiro** alternável a qualquer momento.
 
 </div>
 
@@ -26,7 +26,7 @@ Visão consolidada, cartões com faturas reais, metas com sub-itens, investiment
 
 ## 1. Visão geral
 
-FinTrackerDuo trata o **vínculo entre dois usuários** como feature de primeira classe: cada usuário tem seus próprios dados, e o app oferece um toggle global no header para alternar entre visão **Individual** e **Casal** — recalculando dashboard, transações, cartões, investimentos, metas e relatórios sob o novo escopo, sem duplicação de queries no UI.
+FinTrackerDuo trata o **vínculo entre dois usuários** como feature de primeira classe: cada usuário tem seus próprios dados, e o app oferece um toggle global no header com três escopos — **Individual**, **Casal** (consolidação dos dois) e **Ver como Parceiro** (lente somente leitura sobre os dados do parceiro, como se logado como ele). Trocar o escopo recalcula dashboard, transações, cartões, investimentos, metas e relatórios automaticamente, sem duplicação de queries no UI.
 
 **Filosofia técnica:** zero backend customizado. Toda a lógica de negócio mora em PostgreSQL via Supabase — autenticação, RLS, RPC, triggers, encrypted JWT sessions. O cliente Next.js é um shell que renderiza e orquestra; a verdade fica no banco.
 
@@ -89,8 +89,10 @@ Em vez de espalhar checagens `if (couple.owner_id === user.id)` no client, cada 
 **SSR + middleware refresh de sessão.**
 [`src/proxy.ts`](src/proxy.ts) é o "middleware" do Next.js (renomeado para `proxy` neste fork do Next 16). Ele intercepta todas as rotas, chama [`updateSession`](src/lib/supabase/middleware.ts), refresca cookies de sessão Supabase, e redireciona: usuário não autenticado em rota privada → `/auth/login`; usuário autenticado em `/auth/*` → `/dashboard`. Nenhuma página privada chega a renderizar sem sessão válida.
 
-**Escopo Individual/Casal como hook único.**
-[`useScopeFilter`](src/hooks/use-scope-filter.ts) retorna `{ user, couple, isShared, scopeKey }`. Todo `useQuery` usa `scopeKey` como sufixo da queryKey — quando o usuário troca o toggle no header, **toda** a árvore de queries invalida e refetcha automaticamente. Sem prop drilling, sem `if (viewMode === "couple" && couple)` espalhado em 10+ arquivos.
+**Escopo Individual/Casal/Parceiro como hook único.**
+[`useScopeFilter`](src/hooks/use-scope-filter.ts) retorna `{ user, couple, isShared, isPartnerView, readOnly, scopeUserId, partner, scopeKey }`. Todo `useQuery` usa `scopeKey` como sufixo da queryKey — quando o usuário troca o toggle no header, **toda** a árvore de queries invalida e refetcha automaticamente. Sem prop drilling, sem `if (viewMode === "couple" && couple)` espalhado em 10+ arquivos.
+
+Para **leitura com escopo**, os services recebem `scopeUserId` (que aponta para o parceiro no modo "Ver como Parceiro"); `user.id` continua sendo o usuário logado, usado em escrita e checagens de ownership. O modo parceiro é uma **lente somente leitura** (`readOnly` esconde criar/editar/excluir) e só cobre as telas cujas tabelas têm RLS de visibilidade do casal — **transações e cartões** (e o que deriva delas: dashboard, buscar gastos). Em **investimentos, metas e calendário** a RLS expõe apenas itens compartilhados, então essas telas mostram um aviso ([`PartnerScopeNotice`](src/components/shared/partner-scope-notice.tsx)) em vez de dados parciais.
 
 **Layout master-detail reutilizável.**
 Páginas como `cards` e `goals` têm o mesmo shape: uma lista à esquerda, detalhe à direita, abas no mobile. [`SplitPaneView`](src/components/shared/split-pane-view.tsx) parametriza isso por config declarativa — adicionar a próxima feature com esse padrão custa 1 import.
@@ -188,13 +190,14 @@ src/
 ├── components/
 │   ├── layout/
 │   │   ├── sidebar.tsx                 # Nav colapsável + tooltips
-│   │   └── header.tsx                  # Title + toggle Individual/Casal
+│   │   └── header.tsx                  # Title + toggle Individual/Casal/Parceiro
 │   ├── ui/                             # Primitives shadcn (Button, Dialog, …)
 │   └── shared/                         # Building blocks reaproveitáveis
 │       ├── confirm-delete-dialog.tsx   # AlertDialog padronizado
 │       ├── empty-state.tsx             # Ícone + título + descrição + ação
 │       ├── row-actions-menu.tsx        # DropdownMenu de Editar/Remover
 │       ├── split-pane-view.tsx         # Layout master-detail responsivo
+│       ├── partner-scope-notice.tsx    # Aviso "dados privados" no modo Parceiro
 │       ├── month-selector.tsx
 │       └── category-icon.tsx
 │
@@ -248,6 +251,7 @@ supabase/
 - Aceite valida na mão se o aceitante não é o próprio dono do convite ([`coupleService.acceptInvite`](src/services/couple.service.ts)).
 - Card "ativos" mostra nome + avatar de ambos os parceiros; fallback fetch direto na tabela `profiles` se o join FK falhar.
 - Dissolução do vínculo preserva os dados de cada um (apenas muda `status = "dissolved"`).
+- **Ver como Parceiro**: terceiro modo no toggle do header — uma lente somente leitura que mostra os dados do parceiro (como se logado como ele), com faixa de aviso e botões de criar/editar/excluir escondidos. Cobre transações, cartões, dashboard e buscar gastos; investimentos/metas/agenda continuam privados (limite de RLS).
 
 ### Transações
 - CRUD com tipo (income/expense), categoria, conta, data, status, tags.
@@ -264,6 +268,8 @@ supabase/
 - Modo "Dividir com casal" cria duas rows (50/50) com o mesmo `shared_group_id`.
 - Modo "Lançar para o parceiro" coloca o valor cheio na fatura dele.
 - Totalizadores na fatura: total geral + "sua parte" (quando casal compartilhado).
+- **Filtros na fatura**: Todos / Previsão / Parceladas e, no casal, "Minhas transações" / "Minhas parcelas".
+- **Visão consolidada da fatura**: modo somente leitura que ignora previsões e une as duas metades de cada lançamento dividido (`shared_group_id`) em uma linha só com o valor cheio.
 
 ### Metas
 - Metas com cor, categoria (viagem, carro, casa…), prazo, valor alvo.
@@ -275,6 +281,11 @@ supabase/
 - Portfólio por classe (renda fixa/variável, crypto, FII, outros) + subcategoria + corretora.
 - Cálculo automático de valor investido, valor atual, lucro/prejuízo, rentabilidade %.
 - Gráfico de alocação (pie chart) + breakdown por classe.
+- **Projeção de patrimônio**: card que projeta o quanto a carteira acumula até uma data, partindo do valor atual e do rendimento médio efetivo dos ativos (`yield_rate`/`yield_period`), com aporte mensal pré-preenchido pelos aportes futuros já agendados (despesas na categoria "Investimento").
+
+### Buscar gastos
+- Totaliza quanto foi gasto com um termo e/ou uma **categoria** num período, cruzando transações comuns e lançamentos de cartão.
+- Filtro por texto, por categoria ou os dois combinados; considera apenas gasto realizado (ignora cancelados, previsões e reembolsos).
 
 ### Dashboard
 - Cards de Receitas / Despesas / Saldo / Investimentos com variação % vs. mês anterior.
@@ -426,7 +437,7 @@ const mutation = useToastMutation({
 });
 ```
 
-### 7.4 Hook `useScopeFilter` — padronização do escopo Individual/Casal
+### 7.4 Hook `useScopeFilter` — padronização do escopo Individual/Casal/Parceiro
 
 **Arquivo:** [`src/hooks/use-scope-filter.ts`](src/hooks/use-scope-filter.ts)
 
@@ -434,23 +445,34 @@ const mutation = useToastMutation({
 export function useScopeFilter() {
   const { user, couple } = useAuthStore();
   const { viewMode } = useUIStore();
+  const { partner, partnerId, hasCouple } = usePartner();
+
   const isShared = viewMode === "couple" && !!couple;
-  const scopeKey = isShared && couple ? `couple:${couple.id}` : `user:${user?.id ?? ""}`;
-  return { user, couple, viewMode, isShared, scopeKey };
+  const isPartnerView = viewMode === "partner" && hasCouple && !!partnerId;
+  const readOnly = isPartnerView;                       // lente só leitura
+  const scopeUserId = isPartnerView ? partnerId! : (user?.id ?? "");  // alvo da LEITURA
+
+  const scopeKey = isShared && couple
+    ? `couple:${couple.id}`
+    : isPartnerView ? `partner:${partnerId}` : `user:${user?.id ?? ""}`;
+
+  return { user, couple, viewMode, isShared, isPartnerView, readOnly, scopeUserId, partner, scopeKey };
 }
 ```
 
 **Uso real** ([`src/features/dashboard/recent-transactions.tsx`](src/features/dashboard/recent-transactions.tsx)):
 
 ```ts
-const { user, couple, isShared, scopeKey } = useScopeFilter();
+const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
 
 const { data } = useQuery({
-  queryKey: ["transactions-recent", scopeKey],  // <- invalida automaticamente quando toggle muda
-  queryFn: () => transactionsService.getTransactions(user!.id, couple?.id ?? null, {}, ..., isShared),
+  queryKey: ["transactions-recent", scopeKey],  // <- invalida automaticamente quando o escopo muda
+  queryFn: () => transactionsService.getTransactions(scopeUserId, couple?.id ?? null, {}, ..., isShared),
   enabled: !!user,
 });
 ```
+
+`user.id` continua para escrita/ownership; a **leitura** usa `scopeUserId` (= parceiro no modo "Ver como Parceiro").
 
 ### 7.5 Helper `applyScopeFilter` — filtro SQL único
 

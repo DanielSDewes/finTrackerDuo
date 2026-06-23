@@ -110,82 +110,51 @@ export function CategoriesView() {
           </Dialog>
         </div>
 
-        {/* List */}
-        <Card className="border-border/50">
-          <CardContent className="p-2 sm:p-3">
-            {isLoading ? (
-              <div className="space-y-2 p-2">
-                {Array.from({ length: 8 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2">
-                    <Skeleton className="w-8 h-8 rounded-full shrink-0" />
-                    <Skeleton className="h-4 w-40" />
-                    <Skeleton className="h-4 w-16 ml-auto" />
-                  </div>
-                ))}
-              </div>
-            ) : filtered.length === 0 ? (
-              <EmptyState
-                icon={Tag}
-                title={search ? "Nenhuma categoria encontrada" : "Nenhuma categoria cadastrada"}
-                description={
-                  search
-                    ? "Tente outro termo de busca."
-                    : "Crie sua primeira categoria para usar nas transações e no cartão."
-                }
-              />
-            ) : (
-              <div className="space-y-0.5">
-                {filtered.map((cat) => {
-                  const isOwn = cat.user_id === user?.id;
-                  return (
-                    <div
-                      key={cat.id}
-                      className="flex items-center gap-3 p-2 rounded-lg hover:bg-[hsl(var(--muted)/0.5)] transition-colors group"
-                    >
-                      {/* Color dot */}
+        {/* Grade de categorias — 4 por linha em telas grandes, reduzindo para
+            3/2/1 conforme a largura diminui. */}
+        {isLoading ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Card key={i} className="border-border/50">
+                <CardContent className="p-4">
+                  <Skeleton className="w-10 h-10 rounded-full" />
+                  <Skeleton className="h-4 w-28 mt-3" />
+                  <Skeleton className="h-4 w-20 mt-2" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
+          <EmptyState
+            icon={Tag}
+            title={search ? "Nenhuma categoria encontrada" : "Nenhuma categoria cadastrada"}
+            description={
+              search
+                ? "Tente outro termo de busca."
+                : "Crie sua primeira categoria para usar nas transações e no cartão."
+            }
+          />
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+            {filtered.map((cat) => {
+              const isOwn = cat.user_id === user?.id;
+              return (
+                <Card
+                  key={cat.id}
+                  className="group border-border/50 hover:border-primary/20 hover:shadow-md transition-all"
+                >
+                  <CardContent className="p-4">
+                    {/* Topo: cor + ações (padrão/parceiro são somente leitura) */}
+                    <div className="flex items-start justify-between gap-2">
                       <div
-                        className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                        className="w-10 h-10 rounded-full flex items-center justify-center shrink-0"
                         style={{ backgroundColor: `${cat.color}20` }}
                       >
                         <span
-                          className="w-3 h-3 rounded-full"
+                          className="w-4 h-4 rounded-full"
                           style={{ backgroundColor: cat.color }}
                         />
                       </div>
-
-                      {/* Name + badges */}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className="text-sm font-medium truncate">{cat.name}</p>
-                          {cat.is_default && (
-                            <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
-                              padrão
-                            </Badge>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          {cat.is_transaction && cat.type === "income" && (
-                            <Badge variant="income" className="text-[10px] py-0 h-4 flex items-center gap-1">
-                              <ArrowLeftRight className="w-2.5 h-2.5" />
-                              Receita
-                            </Badge>
-                          )}
-                          {cat.is_transaction && cat.type === "expense" && (
-                            <Badge variant="expense" className="text-[10px] py-0 h-4 flex items-center gap-1">
-                              <ArrowLeftRight className="w-2.5 h-2.5" />
-                              Despesa
-                            </Badge>
-                          )}
-                          {cat.is_card && (
-                            <Badge variant="info" className="text-[10px] py-0 h-4 flex items-center gap-1">
-                              <CreditCard className="w-2.5 h-2.5" />
-                              Cartão
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Actions — categorias padrão e do parceiro são somente leitura */}
                       {isOwn && (
                         <RowActionsMenu
                           triggerClassName="opacity-0 group-hover:opacity-100 transition-opacity"
@@ -196,12 +165,44 @@ export function CategoriesView() {
                         />
                       )}
                     </div>
-                  );
-                })}
-              </div>
-            )}
-          </CardContent>
-        </Card>
+
+                    {/* Nome + badge padrão */}
+                    <div className="mt-3 flex items-center gap-1.5">
+                      <p className="text-sm font-semibold truncate flex-1 min-w-0">{cat.name}</p>
+                      {cat.is_default && (
+                        <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
+                          padrão
+                        </Badge>
+                      )}
+                    </div>
+
+                    {/* Onde é usada */}
+                    <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                      {cat.is_transaction && cat.type === "income" && (
+                        <Badge variant="income" className="text-[10px] py-0 h-4 flex items-center gap-1">
+                          <ArrowLeftRight className="w-2.5 h-2.5" />
+                          Receita
+                        </Badge>
+                      )}
+                      {cat.is_transaction && cat.type === "expense" && (
+                        <Badge variant="expense" className="text-[10px] py-0 h-4 flex items-center gap-1">
+                          <ArrowLeftRight className="w-2.5 h-2.5" />
+                          Despesa
+                        </Badge>
+                      )}
+                      {cat.is_card && (
+                        <Badge variant="info" className="text-[10px] py-0 h-4 flex items-center gap-1">
+                          <CreditCard className="w-2.5 h-2.5" />
+                          Cartão
+                        </Badge>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <ConfirmDeleteDialog

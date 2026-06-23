@@ -21,26 +21,26 @@ const SERIES_LABELS: Record<string, string> = {
 };
 
 export function CashFlowChart() {
-  const { user, couple, isShared, scopeKey } = useScopeFilter();
+  const { user, couple, isShared, scopeKey, scopeUserId } = useScopeFilter();
 
   const { data, isLoading } = useQuery({
     queryKey: ["cash-flow", scopeKey],
     queryFn: () =>
-      transactionsService.getCashFlowData(user!.id, couple?.id ?? null, 6, isShared),
+      transactionsService.getCashFlowData(scopeUserId, couple?.id ?? null, 6, isShared),
     enabled: !!user,
   });
 
   const { data: cardsCashFlow } = useQuery({
     queryKey: ["cash-flow", "cards", scopeKey],
     queryFn: () =>
-      cardsService.getCardsCashFlow(user!.id, couple?.id ?? null, 6, isShared),
+      cardsService.getCardsCashFlow(scopeUserId, couple?.id ?? null, 6, isShared),
     enabled: !!user,
   });
 
   const { data: cardsInvestment } = useQuery({
     queryKey: ["cash-flow", "cards", "investment", scopeKey],
     queryFn: () =>
-      cardsService.getCardsInvestmentCashFlow(user!.id, couple?.id ?? null, 6, isShared),
+      cardsService.getCardsInvestmentCashFlow(scopeUserId, couple?.id ?? null, 6, isShared),
     enabled: !!user,
   });
 
