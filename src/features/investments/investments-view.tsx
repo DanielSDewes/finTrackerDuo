@@ -28,6 +28,7 @@ import { PortfolioTable } from "./portfolio-table";
 import { OperationsReport } from "./operations-report";
 import { PlanningSection } from "./planning-section";
 import { WealthProjection } from "./wealth-projection";
+import { InvestmentContributions } from "./investment-contributions";
 import { PartnerScopeNotice } from "@/components/shared/partner-scope-notice";
 import type { Investment, AssetClass } from "@/types";
 
@@ -325,6 +326,9 @@ export function InvestmentsView() {
           upcomingMonths={upcomingContributions?.months.length ?? 0}
           isLoading={isLoading}
         />
+
+        {/* Aportes (despesas na categoria "Investimento") */}
+        <InvestmentContributions />
 
         {/* Dashboard de proventos */}
         <DividendsDashboard totalInvested={totalInvested} totalCurrent={totalCurrent} />

@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/client";
 import { applyScopeFilter } from "@/lib/supabase/filters";
-import { isInvestmentCategoryName } from "@/lib/investment-category";
+import { isInvestmentCategoryName, INVESTMENT_CATEGORY_NAME } from "@/lib/investment-category";
 import type { Transaction, FilterOptions, PaginationOptions, SortOptions } from "@/types";
 
 // Quantos meses adiante o "Recorrente" replica por padrão. Mesma escolha
@@ -541,6 +541,37 @@ export const transactionsService = {
     const monthlyAverage = months.length > 0 ? total / months.length : 0;
 
     return { total, months, monthlyAverage };
+  },
+
+  /**
+   * Todos os aportes: despesas na categoria "Investimento", de todos os
+   * tempos, da mais recente para a mais antiga. Alimenta o card de aportes da
+   * tela de investimentos (lista + busca + totalizador). O `!inner` +
+   * `category.name` filtra no banco (em vez de puxar todo o histórico de
+   * despesas) e cobre as categorias "Investimento" dos dois parceiros no
+   * modo casal — mesma abordagem do gráfico de fluxo dos cartões.
+   */
+  async getInvestmentTransactions(
+    userId: string,
+    coupleId: string | null,
+    isShared = false,
+  ): Promise<Transaction[]> {
+    const supabase = createClient();
+
+    let query = supabase
+      .from("transactions")
+      .select("*, category:categories!inner(*), account:accounts(*)")
+      .is("deleted_at", null)
+      .eq("type", "expense")
+      .neq("status", "cancelled")
+      .eq("category.name", INVESTMENT_CATEGORY_NAME)
+      .order("date", { ascending: false });
+
+    query = applyScopeFilter(query, { userId, coupleId, isShared, consolidateCouple: true });
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return (data ?? []) as Transaction[];
   },
 
   async getCategoryBreakdown(userId: string, coupleId: string | null, month: string, type: "income" | "expense", isShared = false) {
