@@ -560,7 +560,7 @@ export const transactionsService = {
 
     let query = supabase
       .from("transactions")
-      .select("*, category:categories!inner(*), account:accounts(*)")
+      .select("*, category:categories!inner(*)")
       .is("deleted_at", null)
       .eq("type", "expense")
       .neq("status", "cancelled")

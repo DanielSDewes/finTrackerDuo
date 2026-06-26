@@ -328,7 +328,7 @@ export function InvestmentsView() {
         />
 
         {/* Aportes (despesas na categoria "Investimento") */}
-        <InvestmentContributions />
+        <InvestmentContributions totalCurrent={totalCurrent} />
 
         {/* Dashboard de proventos */}
         <DividendsDashboard totalInvested={totalInvested} totalCurrent={totalCurrent} />
