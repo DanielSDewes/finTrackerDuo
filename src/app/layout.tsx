@@ -22,7 +22,7 @@ const appUrl = rawUrl.startsWith("http") ? rawUrl : `https://${rawUrl}`;
 export const metadata: Metadata = {
   metadataBase: new URL(appUrl),
   title: {
-    default: "FinTrackerDuo — Controle Financeiro para Casais",
+    default: "FinTrackerDuo",
     template: "%s | FinTrackerDuo",
   },
   description:
@@ -45,13 +45,13 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "pt_BR",
-    title: "FinTrackerDuo — Controle Financeiro para Casais",
+    title: "FinTrackerDuo",
     description: "Organize suas finanças pessoais e do casal em uma plataforma moderna.",
     siteName: "FinTrackerDuo",
     images: [
       {
         url: "/iconeSite.png",
-        alt: "FinTrackerDuo — Controle Financeiro para Casais",
+        alt: "FinTrackerDuo",
       },
     ],
   },
