@@ -3,6 +3,24 @@ import { applyScopeFilter } from "@/lib/supabase/filters";
 
 export type SpendSearchSource = "transaction" | "card";
 
+/**
+ * Filtro de situação do gasto.
+ *
+ * Como lançamentos de cartão não têm coluna `status`, cada opção mapeia para o
+ * equivalente mais próximo nas duas origens:
+ *   all       — gasto realizado: transações pendentes + concluídas, e no cartão
+ *               os lançamentos efetivos (previsões de fora). É o padrão, e é
+ *               exatamente o que a tela já somava antes deste filtro existir.
+ *   completed — transações concluídas + lançamentos efetivos do cartão.
+ *   pending   — transações pendentes + previsões do cartão (o "ainda vai
+ *               acontecer" de cada origem).
+ *   cancelled — só transações; o cartão não tem cancelamento.
+ *
+ * Reembolsos do cartão ficam fora em qualquer opção: o valor volta, então não
+ * é gasto.
+ */
+export type SpendStatusFilter = "all" | "pending" | "completed" | "cancelled";
+
 export type SpendSearchItem = {
   id: string;
   source: SpendSearchSource;
@@ -13,6 +31,11 @@ export type SpendSearchItem = {
   categoryName: string | null;
   /** Nome do cartão (apenas para itens de cartão). */
   cardName: string | null;
+  /**
+   * Situação normalizada entre as duas origens: o `status` da transação, ou,
+   * no cartão, "pending" para previsão e "completed" para lançamento efetivo.
+   */
+  status: "pending" | "completed" | "cancelled";
 };
 
 export type SpendSearchResult = {
@@ -58,6 +81,7 @@ export const spendSearchService = {
     dateFrom: string,
     dateTo: string,
     isShared = false,
+    status: SpendStatusFilter = "all",
   ): Promise<SpendSearchResult> {
     const safeTerm = sanitizeTerm(term);
     // Sem termo nem categoria não há o que buscar.
@@ -69,12 +93,13 @@ export const spendSearchService = {
     // Transações comuns (despesas).
     let txQuery = supabase
       .from("transactions")
-      .select("id, description, amount, date, category:categories(name)")
+      .select("id, description, amount, date, status, category:categories(name)")
       .is("deleted_at", null)
       .eq("type", "expense")
-      .neq("status", "cancelled")
       .gte("date", dateFrom)
       .lte("date", dateTo);
+    if (status === "all") txQuery = txQuery.neq("status", "cancelled");
+    else txQuery = txQuery.eq("status", status);
     if (safeTerm) txQuery = txQuery.ilike("description", pattern);
     if (categoryId) txQuery = txQuery.eq("category_id", categoryId);
     txQuery = applyScopeFilter(txQuery, {
@@ -88,18 +113,24 @@ export const spendSearchService = {
     let cardQuery = supabase
       .from("credit_card_transactions")
       .select(
-        "id, title, description, amount, date, category:categories(name), card:credit_cards(name)",
+        "id, title, description, amount, date, is_forecast, category:categories(name), card:credit_cards(name)",
       )
       .is("deleted_at", null)
       .eq("is_reimbursed", false)
-      .eq("is_forecast", false)
+      // "pending" no cartão é a previsão; nas demais opções valem só os
+      // lançamentos efetivos.
+      .eq("is_forecast", status === "pending")
       .gte("date", dateFrom)
       .lte("date", dateTo);
     if (safeTerm) cardQuery = cardQuery.or(`title.ilike.${pattern},description.ilike.${pattern}`);
     if (categoryId) cardQuery = cardQuery.eq("category_id", categoryId);
     if (!(isShared && coupleId)) cardQuery = cardQuery.eq("user_id", userId);
 
-    const [txRes, cardRes] = await Promise.all([txQuery, cardQuery]);
+    // Cartão não tem cancelamento, então a opção "canceladas" nem consulta.
+    const [txRes, cardRes] = await Promise.all([
+      txQuery,
+      status === "cancelled" ? Promise.resolve({ data: [], error: null }) : cardQuery,
+    ]);
     if (txRes.error) throw txRes.error;
     if (cardRes.error) throw cardRes.error;
 
@@ -108,6 +139,7 @@ export const spendSearchService = {
       description: string;
       amount: number;
       date: string;
+      status: "pending" | "completed" | "cancelled";
       category: { name: string } | null;
     };
     type CardRow = {
@@ -115,6 +147,7 @@ export const spendSearchService = {
       title: string;
       amount: number;
       date: string;
+      is_forecast: boolean;
       category: { name: string } | null;
       card: { name: string } | null;
     };
@@ -133,6 +166,7 @@ export const spendSearchService = {
         date: t.date,
         categoryName: t.category?.name ?? null,
         cardName: null,
+        status: t.status,
       });
     }
 
@@ -146,6 +180,7 @@ export const spendSearchService = {
         date: c.date,
         categoryName: c.category?.name ?? null,
         cardName: c.card?.name ?? null,
+        status: c.is_forecast ? "pending" : "completed",
       });
     }
 

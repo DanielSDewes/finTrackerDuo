@@ -27,20 +27,64 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { TransactionForm } from "./transaction-form";
 import type { Transaction, TransactionStatus } from "@/types";
 import { motion, AnimatePresence } from "framer-motion";
 
-// Filtro de status da lista. "all" = sem filtro; os demais espelham os
-// valores de `status` das transações (a coluna `status` no banco).
+// Opções dos combos de status. Cada card (Receitas e Despesas) tem o seu, com
+// contagem própria: recortar as despesas pendentes não mexe nas receitas.
+// "all" = sem filtro; os demais espelham os valores da coluna `status`.
+// Os combos recortam apenas as LISTAS — os totais de cada card e o saldo do
+// mês são calculados sobre o mês inteiro, independentes deles.
 const STATUS_FILTERS: { value: TransactionStatus | "all"; label: string }[] = [
   { value: "all", label: "Todas" },
   { value: "pending", label: "Pendentes" },
   { value: "completed", label: "Concluídas" },
   { value: "cancelled", label: "Canceladas" },
 ];
+
+/**
+ * Combo de status de um card. Recorta apenas a lista daquele card — o total
+ * exibido no cabeçalho e o saldo do mês são do mês inteiro, de propósito.
+ */
+function StatusFilterSelect({
+  value,
+  onChange,
+  counts,
+  label,
+}: {
+  value: TransactionStatus | "all";
+  onChange: (value: TransactionStatus | "all") => void;
+  counts: Record<TransactionStatus | "all", number>;
+  label: string;
+}) {
+  return (
+    <Select value={value} onValueChange={(v) => onChange(v as TransactionStatus | "all")}>
+      <SelectTrigger
+        className="h-7 w-full text-xs"
+        aria-label={`Filtrar ${label} por status`}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {STATUS_FILTERS.map(({ value: v, label: optLabel }) => (
+          <SelectItem key={v} value={v} className="text-xs">
+            {optLabel}
+            <span className="text-[hsl(var(--muted-foreground))] tabular-nums">
+              {" "}
+              ({counts[v]})
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
 interface TransactionRowProps {
   transaction: Transaction;
@@ -174,7 +218,10 @@ export function TransactionsView() {
   // de parcelas no texto de confirmação.
   const [deleteGroupTarget, setDeleteGroupTarget] = useState<Transaction | null>(null);
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<TransactionStatus | "all">("all");
+  // Um filtro por card: receitas e despesas se investigam separado (ver só as
+  // despesas pendentes não deveria mexer na lista de receitas).
+  const [incomeStatus, setIncomeStatus] = useState<TransactionStatus | "all">("all");
+  const [expenseStatus, setExpenseStatus] = useState<TransactionStatus | "all">("all");
 
   const currentMonth = new Date().toISOString().slice(0, 7);
   const months = getMonthWindow(selectedMonth);
@@ -243,29 +290,69 @@ export function TransactionsView() {
     setFormOpen(true);
   };
 
-  const hasActiveFilter = !!search || statusFilter !== "all";
+  const monthTransactions = data?.data ?? [];
 
-  const filtered = (data?.data ?? []).filter((tx) => {
-    if (search && !tx.description.toLowerCase().includes(search.toLowerCase())) return false;
-    if (statusFilter !== "all" && tx.status !== statusFilter) return false;
-    return true;
+  // A busca vem primeiro e vale para os dois cards; o status é por card. Assim
+  // os contadores de cada combo mostram quanto aquele status renderia naquele
+  // card, dentro da busca atual.
+  const searched = monthTransactions.filter(
+    (tx) => !search || tx.description.toLowerCase().includes(search.toLowerCase()),
+  );
+
+  const searchedIncome = searched.filter((t) => t.type === "income");
+  const searchedExpense = searched.filter((t) => t.type === "expense");
+
+  const countsByStatus = (
+    list: Transaction[],
+  ): Record<TransactionStatus | "all", number> => ({
+    all: list.length,
+    pending: list.filter((t) => t.status === "pending").length,
+    completed: list.filter((t) => t.status === "completed").length,
+    cancelled: list.filter((t) => t.status === "cancelled").length,
   });
 
-  const incomeList = filtered.filter((t) => t.type === "income");
-  const expenseList = filtered.filter((t) => t.type === "expense");
+  const incomeCounts = countsByStatus(searchedIncome);
+  const expenseCounts = countsByStatus(searchedExpense);
 
-  // Com busca ou filtro de status ativo, escondemos as linhas de fatura: são
-  // "despesas virtuais" agregadas, sem status por lançamento, então não fazem
-  // sentido ao procurar transações específicas ou filtrar por pendentes.
-  const cardBillRows = !hasActiveFilter
-    ? cardsSummary.filter((c) => c.monthTotal > 0)
-    : [];
+  const incomeList = searchedIncome.filter(
+    (tx) => incomeStatus === "all" || tx.status === incomeStatus,
+  );
+  const expenseList = searchedExpense.filter(
+    (tx) => expenseStatus === "all" || tx.status === expenseStatus,
+  );
 
-  const incomeTotal = incomeList.reduce((s, t) => s + t.amount, 0);
-  const txExpenseTotal = expenseList.reduce((s, t) => s + t.amount, 0);
-  const cardExpenseTotal = cardBillRows.reduce((s, c) => s + c.monthTotal, 0);
+  // Recorte ativo por card — decide o texto de lista vazia, o "X de Y" e, no
+  // card de despesas, a exibição das linhas de fatura.
+  const incomeFiltered = !!search || incomeStatus !== "all";
+  const expenseFiltered = !!search || expenseStatus !== "all";
+  const anyFilterActive = incomeFiltered || expenseFiltered;
+
+  // Faturas de cartão do mês: "despesas virtuais" agregadas, sem status por
+  // lançamento. Entram sempre no total, mas só aparecem NA LISTA quando o card
+  // de despesas não está recortado — não faz sentido exibi-las ao procurar uma
+  // transação específica ou ao isolar as pendentes.
+  const monthCardBills = cardsSummary.filter((c) => c.monthTotal > 0);
+  const cardBillRows = !expenseFiltered ? monthCardBills : [];
+
+  // TOTAIS E SALDO SÃO DO MÊS INTEIRO — deliberadamente indiferentes à busca e
+  // ao filtro de status. Quanto entrou e quanto saiu no mês é um fato do mês;
+  // não pode mudar porque o usuário foi olhar só as pendentes. O filtro recorta
+  // as listas abaixo, e os contadores dos cards mostram "X de Y" pra deixar
+  // claro que a lista é um recorte do total exibido.
+  const incomeTotal = monthTransactions
+    .filter((t) => t.type === "income")
+    .reduce((s, t) => s + t.amount, 0);
+  const txExpenseTotal = monthTransactions
+    .filter((t) => t.type === "expense")
+    .reduce((s, t) => s + t.amount, 0);
+  const cardExpenseTotal = monthCardBills.reduce((s, c) => s + c.monthTotal, 0);
   const expenseTotal = txExpenseTotal + cardExpenseTotal;
   const balance = incomeTotal - expenseTotal;
+
+  // Quantidades do mês, para o "X de Y" dos cabeçalhos.
+  const monthIncomeCount = monthTransactions.filter((t) => t.type === "income").length;
+  const monthExpenseCount =
+    monthTransactions.filter((t) => t.type === "expense").length + monthCardBills.length;
 
   const selectedMonthLabel = new Date(Date.UTC(year, monthNum - 1, 1)).toLocaleDateString(
     "pt-BR", { month: "long", year: "numeric", timeZone: "UTC" }
@@ -305,7 +392,8 @@ export function TransactionsView() {
                 onClick={() => {
                   setViewingPartner((v) => !v);
                   setSearch("");
-                  setStatusFilter("all");
+                  setIncomeStatus("all");
+                  setExpenseStatus("all");
                   setFormOpen(false);
                   setEditingTransaction(null);
                 }}
@@ -353,24 +441,6 @@ export function TransactionsView() {
               </DialogContent>
             </Dialog>
           )}
-        </div>
-
-        {/* Filtro por status */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide mr-0.5">
-            Status
-          </span>
-          {STATUS_FILTERS.map(({ value, label }) => (
-            <Button
-              key={value}
-              variant={statusFilter === value ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={() => setStatusFilter(value)}
-            >
-              {label}
-            </Button>
-          ))}
         </div>
 
         {/* Two-panel layout */}
@@ -433,7 +503,9 @@ export function TransactionsView() {
               <h3 className="text-base font-semibold capitalize">{selectedMonthLabel}</h3>
               {!isLoading && (
                 <span className="text-xs text-[hsl(var(--muted-foreground))]">
-                  ({filtered.length} transaç{filtered.length === 1 ? "ão" : "ões"})
+                  ({incomeList.length + expenseList.length}
+                  {anyFilterActive && ` de ${monthTransactions.length}`} transaç
+                  {incomeList.length + expenseList.length === 1 ? "ão" : "ões"})
                 </span>
               )}
             </div>
@@ -506,9 +578,10 @@ export function TransactionsView() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold text-[hsl(var(--success))]">
                       Receitas
-                      {!isLoading && incomeList.length > 0 && (
+                      {!isLoading && monthIncomeCount > 0 && (
                         <span className="ml-1.5 text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                          ({incomeList.length})
+                          ({incomeList.length}
+                          {incomeFiltered && ` de ${monthIncomeCount}`})
                         </span>
                       )}
                     </CardTitle>
@@ -518,6 +591,16 @@ export function TransactionsView() {
                       </span>
                     )}
                   </div>
+                  {!isLoading && monthIncomeCount > 0 && (
+                    <div className="pt-1.5 max-w-[11rem]">
+                      <StatusFilterSelect
+                        value={incomeStatus}
+                        onChange={setIncomeStatus}
+                        counts={incomeCounts}
+                        label="receitas"
+                      />
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="pt-0 px-3 pb-3">
                   {isLoading ? (
@@ -526,7 +609,7 @@ export function TransactionsView() {
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <ArrowUpRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                        {hasActiveFilter ? "Nenhuma receita encontrada" : "Nenhuma receita neste mês"}
+                        {incomeFiltered ? "Nenhuma receita encontrada" : "Nenhuma receita neste mês"}
                       </p>
                     </div>
                   ) : (
@@ -555,9 +638,10 @@ export function TransactionsView() {
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-sm font-semibold text-[hsl(var(--expense))]">
                       Despesas
-                      {!isLoading && !loadingCards && (expenseList.length + cardBillRows.length) > 0 && (
+                      {!isLoading && !loadingCards && monthExpenseCount > 0 && (
                         <span className="ml-1.5 text-xs font-normal text-[hsl(var(--muted-foreground))]">
-                          ({expenseList.length + cardBillRows.length})
+                          ({expenseList.length + cardBillRows.length}
+                          {expenseFiltered && ` de ${monthExpenseCount}`})
                         </span>
                       )}
                     </CardTitle>
@@ -567,6 +651,16 @@ export function TransactionsView() {
                       </span>
                     )}
                   </div>
+                  {!isLoading && !loadingCards && monthExpenseCount > 0 && (
+                    <div className="pt-1.5 max-w-[11rem]">
+                      <StatusFilterSelect
+                        value={expenseStatus}
+                        onChange={setExpenseStatus}
+                        counts={expenseCounts}
+                        label="despesas"
+                      />
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="pt-0 px-3 pb-3">
                   {isLoading || loadingCards ? (
@@ -575,7 +669,7 @@ export function TransactionsView() {
                     <div className="flex flex-col items-center justify-center py-10 text-center">
                       <ArrowDownRight className="w-8 h-8 text-[hsl(var(--muted-foreground)/0.3)] mb-2" />
                       <p className="text-sm text-[hsl(var(--muted-foreground))]">
-                        {hasActiveFilter ? "Nenhuma despesa encontrada" : "Nenhuma despesa neste mês"}
+                        {expenseFiltered ? "Nenhuma despesa encontrada" : "Nenhuma despesa neste mês"}
                       </p>
                     </div>
                   ) : (

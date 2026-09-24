@@ -233,7 +233,8 @@ supabase/
                         # SQL Editor do Supabase e execute uma única vez.
                         # Contém: extensões, 14 tabelas, índices, triggers,
                         # 48 políticas RLS, 4 RPCs SECURITY DEFINER, grants
-                        # e seed das categorias padrão.
+                        # e o seed de categorias padrão por usuário
+                        # (semeado no cadastro, não global).
 ```
 
 ---
@@ -635,7 +636,7 @@ Todo o schema vive em um único arquivo: [`supabase/schema.sql`](supabase/schema
 | 6. Políticas | 48 políticas SELECT/INSERT/UPDATE/DELETE — autorização baseada em `auth.uid()` e relação de casal |
 | 7. RPCs SECURITY DEFINER | `soft_delete_transaction`, `soft_delete_partner_transaction`, `soft_delete_card_transaction`, `soft_delete_card_installment_group` |
 | 8. Grants | `USAGE` no schema public e CRUD para role `authenticated` |
-| 9. Seed | 20 categorias padrão (Salário, Moradia, Alimentação, Pet, Renda Fixa, etc.) |
+| 9. Seed | Nenhum dado global. As 17 categorias padrão (Salário, Moradia, Alimentação, Pet, etc.) são semeadas **por usuário** no cadastro, por `seed_default_categories()` via trigger `handle_new_user` — assim cada um pode editá-las e inativá-las sem afetar as outras contas |
 
 **Aviso:** o script não é idempotente — não rode duas vezes no mesmo banco. Para um banco existente em produção, prefira migrações incrementais.
 

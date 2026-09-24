@@ -67,7 +67,11 @@ CREATE TABLE accounts (
   updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- ---- categories (cadastradas pelo usuário; defaults com user_id NULL) ----
+-- ---- categories (todas com dono: user_id NOT NULL na prática) ----
+-- As categorias padrão são semeadas POR USUÁRIO no cadastro
+-- (seed_default_categories, chamada por handle_new_user) e marcadas com
+-- is_default = TRUE. Elas têm dono, portanto o usuário pode editá-las,
+-- inativá-las e excluí-las como qualquer outra — sem afetar outras contas.
 -- Cada categoria marca onde é usada:
 --   * is_transaction — aparece no lançamento de transações; `type` indica se
 --                      é receita (income) ou despesa (expense)
@@ -86,6 +90,9 @@ CREATE TABLE categories (
   is_transaction  BOOLEAN NOT NULL DEFAULT FALSE,
   is_card         BOOLEAN NOT NULL DEFAULT FALSE,
   is_default      BOOLEAN NOT NULL DEFAULT FALSE,
+  -- Inativa: nao aparece nos seletores de lancamento, mas continua nomeando
+  -- os lancamentos historicos. Alternativa a exclusao quando ja ha uso.
+  is_active       BOOLEAN NOT NULL DEFAULT TRUE,
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT categories_income_not_card CHECK (NOT (is_card AND type = 'income'))
 );
@@ -516,6 +523,51 @@ CREATE TRIGGER trg_calendar_events_updated_at
   FOR EACH ROW EXECUTE FUNCTION handle_updated_at();
 
 -- ---- novo usuário Supabase → cria profile automaticamente ----
+-- ---- seed_default_categories: categorias padrão de UM usuário ----
+-- Cada usuário recebe a sua própria cópia das categorias padrão, para poder
+-- editar/inativar/excluir sem afetar outras contas. Receitas são só de
+-- transação; despesas valem para transação E cartão.
+-- Cores: receitas em verdes/teals (sinal de entrada); despesas espalhadas pelo
+-- spectrum para diferenciar visualmente nas pizzas e barras do dashboard.
+CREATE OR REPLACE FUNCTION public.seed_default_categories(p_user_id UUID)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $fn$
+BEGIN
+  INSERT INTO categories
+    (user_id, couple_id, name, type, color, is_transaction, is_card, is_default, is_active)
+  SELECT p_user_id, NULL::UUID, d.name, d.type, d.color, d.is_transaction, d.is_card, TRUE, TRUE
+  FROM (VALUES
+    -- Receitas
+    ('Salário',           'income',  '#16a34a', TRUE, FALSE),
+    ('Freelance',         'income',  '#0d9488', TRUE, FALSE),
+    ('Investimentos',     'income',  '#65a30d', TRUE, FALSE),
+    ('Outros',            'income',  '#059669', TRUE, FALSE),
+    -- Despesas (transação e cartão)
+    ('Moradia',           'expense', '#dc2626', TRUE, TRUE),
+    ('Alimentação',       'expense', '#ea580c', TRUE, TRUE),
+    ('Transporte',        'expense', '#ca8a04', TRUE, TRUE),
+    ('Saúde',             'expense', '#0891b2', TRUE, TRUE),
+    ('Educação',          'expense', '#2563eb', TRUE, TRUE),
+    ('Lazer',             'expense', '#db2777', TRUE, TRUE),
+    ('Vestuário',         'expense', '#9333ea', TRUE, TRUE),
+    ('Presente',          'expense', '#e11d48', TRUE, TRUE),
+    ('Pet',               'expense', '#f59e0b', TRUE, TRUE),
+    ('Assinaturas',       'expense', '#475569', TRUE, TRUE),
+    ('Cartão de Crédito', 'expense', '#c026d3', TRUE, TRUE),
+    ('Investimento',      'expense', '#4f46e5', TRUE, TRUE),
+    ('Outros',            'expense', '#6b7280', TRUE, TRUE)
+  ) AS d(name, type, color, is_transaction, is_card)
+  -- Não duplica em reexecução nem sobrescreve o que o usuário já tem.
+  WHERE NOT EXISTS (
+    SELECT 1 FROM categories c
+    WHERE c.user_id = p_user_id AND c.name = d.name AND c.type = d.type
+  );
+END;
+$fn$;
+
 -- ON CONFLICT + EXCEPTION garantem que falhas no profile não bloqueiem o
 -- cadastro do usuário (caso de race condition ou retentativa do Supabase Auth).
 CREATE OR REPLACE FUNCTION public.handle_new_user()
@@ -532,6 +584,15 @@ BEGIN
     NEW.email
   )
   ON CONFLICT (id) DO NOTHING;
+
+  -- Categorias padrão do usuário. Bloco próprio: uma falha aqui não pode
+  -- desfazer a criação do profile.
+  BEGIN
+    PERFORM public.seed_default_categories(NEW.id);
+  EXCEPTION
+    WHEN OTHERS THEN
+      RAISE WARNING 'seed_default_categories failed: % %', SQLERRM, SQLSTATE;
+  END;
 
   -- registra o aceite dos Termos feito no cadastro (auditoria). Bloco próprio
   -- para que uma falha aqui não desfaça a criação do profile.
@@ -666,12 +727,20 @@ CREATE POLICY "Users can manage own accounts" ON accounts
   FOR ALL USING (auth.uid() = user_id);
 
 -- ---- categories ----
-CREATE POLICY "Users can view own and default categories" ON categories
+-- Sem cláusula `is_default = TRUE`: como cada usuário tem a SUA cópia das
+-- categorias padrão, ela tornaria a categoria de um usuário legível por todos.
+-- As categorias do parceiro entram para que o join `category:categories(...)`
+-- continue resolvendo o nome nos lançamentos dele na visão do casal.
+CREATE POLICY "Users can view own and partner categories" ON categories
   FOR SELECT USING (
-    auth.uid() = user_id OR
-    is_default = TRUE OR
-    couple_id IN (
+    auth.uid() = user_id
+    OR couple_id IN (
       SELECT id FROM couples WHERE owner_id = auth.uid() OR partner_id = auth.uid()
+    )
+    OR user_id IN (
+      SELECT owner_id   FROM couples WHERE partner_id = auth.uid()
+      UNION
+      SELECT partner_id FROM couples WHERE owner_id = auth.uid()
     )
   );
 
@@ -1474,6 +1543,7 @@ DECLARE
   trigger_funcs TEXT[] := ARRAY[
     'public.handle_updated_at()',
     'public.handle_new_user()',
+    'public.seed_default_categories(uuid)',
     'public.set_goal_subgoals_timestamps()',
     'public.sync_investment_dividends()'
   ];
@@ -1516,45 +1586,38 @@ GRANT SELECT ON ALL TABLES IN SCHEMA public TO anon;
 -- =============================================================================
 -- 9. SEED — categorias padrão
 -- =============================================================================
--- Paleta organizada para o gráfico de pizza do dashboard:
--- - Receitas em verdes/teals (sinal de entrada).
--- - Despesas espalhadas por todo o spectrum (vermelho/laranja/azul/roxo etc.)
---   para diferenciar visualmente quando o usuário tem muitas categorias.
--- Cada cor é única dentro do tipo (e entre tipos, exceto pelo "Outros" cinza,
--- que é genérico e propositalmente neutro).
+-- Não há seed global aqui. As categorias padrão são criadas POR USUÁRIO, pela
+-- função seed_default_categories() (seção 5), chamada pelo trigger
+-- handle_new_user no cadastro.
 --
--- Receitas são só de transação; despesas valem para transação E cartão
--- ("ambas"), espelhando o backfill da migration 2026-06-10.
-INSERT INTO categories (id, user_id, name, type, color, is_transaction, is_card, is_default) VALUES
-  -- Receitas
-  (uuid_generate_v4(), NULL, 'Salário',             'income',     '#16a34a', TRUE, FALSE, TRUE),
-  (uuid_generate_v4(), NULL, 'Freelance',           'income',     '#0d9488', TRUE, FALSE, TRUE),
-  (uuid_generate_v4(), NULL, 'Investimentos',       'income',     '#65a30d', TRUE, FALSE, TRUE),
-  (uuid_generate_v4(), NULL, 'Outros',              'income',     '#059669', TRUE, FALSE, TRUE),
-
-  -- Despesas
-  (uuid_generate_v4(), NULL, 'Moradia',             'expense',    '#dc2626', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Alimentação',         'expense',    '#ea580c', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Transporte',          'expense',    '#ca8a04', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Saúde',               'expense',    '#0891b2', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Educação',            'expense',    '#2563eb', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Lazer',               'expense',    '#db2777', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Vestuário',           'expense',    '#9333ea', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Presente',            'expense',    '#e11d48', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Pet',                 'expense',    '#f59e0b', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Assinaturas',         'expense',    '#475569', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Cartão de Crédito',   'expense',    '#c026d3', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Investimento',        'expense',    '#4f46e5', TRUE, TRUE,  TRUE),
-  (uuid_generate_v4(), NULL, 'Outros',              'expense',    '#6b7280', TRUE, TRUE,  TRUE);
+-- Por quê: até 2026-09 cada categoria padrão era UMA linha global (user_id
+-- NULL) compartilhada por todos os usuários. Como a policy de escrita exige
+-- auth.uid() = user_id, ninguém conseguia editá-las — e liberar a edição faria
+-- uma alteração vazar para todas as contas. Com uma cópia por usuário, toda
+-- categoria tem dono e editar / inativar / excluir funciona normalmente.
+--
+-- Para bancos criados antes dessa mudança, rode
+-- supabase/migrations/2026-09-24-per-user-categories.sql: ela copia os
+-- defaults globais para cada usuário, re-aponta os lançamentos e remove as
+-- linhas globais.
+--
+-- A paleta (verdes/teals para receita, spectrum amplo para despesa, pensada
+-- para as pizzas e barras do dashboard) vive na própria
+-- seed_default_categories.
 
 
 -- =============================================================================
 -- 9.1. REFRESH DE CORES — para installs existentes
 -- =============================================================================
--- Os INSERTs acima só rodam em setup fresco. Em bancos já populados, aplique
--- estes UPDATEs no SQL Editor do Supabase para repintar as categorias default
--- com a paleta nova (custom categories dos usuários não são tocadas, porque
--- filtramos por is_default = TRUE).
+-- Snippet de manutenção — NÃO roda sozinho em nada, é para colar no SQL Editor
+-- do Supabase quando você quiser repintar as categorias padrão com a paleta
+-- acima.
+--
+-- ATENÇÃO: desde a migration 2026-09-24 cada usuário tem a SUA cópia das
+-- categorias padrão (is_default = TRUE, com dono). Estes UPDATEs alcançam as
+-- cópias de TODOS os usuários e sobrescrevem cores que eles tenham
+-- personalizado nessas categorias. Categorias criadas do zero pelo usuário
+-- (is_default = FALSE) continuam intocadas.
 UPDATE categories SET color = CASE name
   WHEN 'Salário'        THEN '#16a34a'
   WHEN 'Freelance'      THEN '#0d9488'

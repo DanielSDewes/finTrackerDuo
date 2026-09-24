@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Search, CreditCard, Receipt, Loader2 } from "lucide-react";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
 import { categoriesService } from "@/services/categories.service";
-import { spendSearchService } from "./spend-search.service";
+import { spendSearchService, type SpendStatusFilter } from "./spend-search.service";
 import { formatCurrency, formatDate, cn } from "@/lib/utils";
 import { Header } from "@/components/layout/header";
 import { Button } from "@/components/ui/button";
@@ -36,6 +36,23 @@ function defaultRange(): { from: string; to: string } {
   from.setDate(1);
   return { from: toISODate(from), to: toISODate(to) };
 }
+
+// Situação do gasto. "Todas" é o gasto realizado (pendentes + concluídas, sem
+// canceladas) — o comportamento histórico da tela. Ver SpendStatusFilter para
+// como cada opção mapeia nos lançamentos de cartão, que não têm status.
+const STATUS_FILTERS: { value: SpendStatusFilter; label: string }[] = [
+  { value: "all", label: "Todas" },
+  { value: "completed", label: "Concluídas" },
+  { value: "pending", label: "Pendentes" },
+  { value: "cancelled", label: "Canceladas" },
+];
+
+const STATUS_HINT: Record<SpendStatusFilter, string> = {
+  all: "Pendentes e concluídas, sem canceladas nem previsões de cartão.",
+  completed: "Transações concluídas e lançamentos efetivos do cartão.",
+  pending: "Transações pendentes e previsões da fatura.",
+  cancelled: "Só transações — a fatura do cartão não tem cancelamento.",
+};
 
 type Preset = { label: string; range: () => { from: string; to: string } };
 
@@ -79,6 +96,7 @@ export function SpendSearchView() {
   const [categoryId, setCategoryId] = useState<string>(ALL_CATEGORIES);
   const [dateFrom, setDateFrom] = useState(initial.from);
   const [dateTo, setDateTo] = useState(initial.to);
+  const [status, setStatus] = useState<SpendStatusFilter>("all");
 
   // Categorias usadas em transações e/ou no cartão — mesma lista da tela de
   // cadastro, já que a busca cruza as duas origens.
@@ -96,10 +114,14 @@ export function SpendSearchView() {
     categoryName: string | null;
     from: string;
     to: string;
+    status: SpendStatusFilter;
   } | null>(null);
 
   const { data, isLoading, isFetching } = useQuery({
-    queryKey: ["spend-search", scopeKey, applied?.term, applied?.categoryId, applied?.from, applied?.to],
+    queryKey: [
+      "spend-search", scopeKey, applied?.term, applied?.categoryId,
+      applied?.from, applied?.to, applied?.status,
+    ],
     queryFn: () =>
       spendSearchService.searchSpend(
         scopeUserId,
@@ -109,6 +131,7 @@ export function SpendSearchView() {
         applied!.from,
         applied!.to,
         isShared,
+        applied!.status,
       ),
     enabled:
       !!user && !!applied && (applied.term.trim().length > 0 || !!applied.categoryId),
@@ -116,7 +139,7 @@ export function SpendSearchView() {
 
   // Monta o filtro aplicado a partir do estado atual, resolvendo o nome da
   // categoria para exibição. Retorna null quando não há critério algum.
-  const buildApplied = (from: string, to: string) => {
+  const buildApplied = (from: string, to: string, nextStatus: SpendStatusFilter = status) => {
     const trimmed = term.trim();
     const catId = categoryId === ALL_CATEGORIES ? null : categoryId;
     if (!trimmed && !catId) return null;
@@ -126,12 +149,20 @@ export function SpendSearchView() {
       categoryName: catId ? categories?.find((c) => c.id === catId)?.name ?? null : null,
       from,
       to,
+      status: nextStatus,
     };
   };
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
     const next = buildApplied(dateFrom, dateTo);
+    if (next) setApplied(next);
+  };
+
+  // Trocar a situação re-aplica na hora, espelhando os atalhos de período.
+  const applyStatus = (nextStatus: SpendStatusFilter) => {
+    setStatus(nextStatus);
+    const next = buildApplied(dateFrom, dateTo, nextStatus);
     if (next) setApplied(next);
   };
 
@@ -247,6 +278,28 @@ export function SpendSearchView() {
                   </Button>
                 ))}
               </div>
+
+              {/* Situação do gasto */}
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-medium text-[hsl(var(--muted-foreground))] uppercase tracking-wide mr-0.5">
+                  Situação
+                </span>
+                {STATUS_FILTERS.map(({ value, label }) => (
+                  <Button
+                    key={value}
+                    type="button"
+                    variant={status === value ? "default" : "outline"}
+                    size="sm"
+                    className="h-7 px-3 text-xs"
+                    onClick={() => applyStatus(value)}
+                  >
+                    {label}
+                  </Button>
+                ))}
+                <span className="text-xs text-[hsl(var(--muted-foreground))] w-full sm:w-auto sm:ml-1">
+                  {STATUS_HINT[status]}
+                </span>
+              </div>
             </form>
           </CardContent>
         </Card>
@@ -269,7 +322,11 @@ export function SpendSearchView() {
             icon={Search}
             variant="full"
             title={`Nenhum gasto encontrado para ${appliedLabel}`}
-            description="Tente outro termo, outra categoria ou amplie o período."
+            description={
+              applied.status === "all"
+                ? "Tente outro termo, outra categoria ou amplie o período."
+                : "Tente outro termo, amplie o período ou volte a situação para “Todas”."
+            }
           />
         ) : (
           <>
@@ -280,6 +337,8 @@ export function SpendSearchView() {
                   <div>
                     <p className="text-xs text-[hsl(var(--muted-foreground))] uppercase tracking-wide">
                       Total com {appliedLabel}
+                      {applied.status !== "all" &&
+                        ` · ${STATUS_FILTERS.find((f) => f.value === applied.status)!.label.toLowerCase()}`}
                     </p>
                     <p className="text-3xl font-bold text-[hsl(var(--expense))] tabular-nums">
                       {formatCurrency(data.total)}
@@ -346,6 +405,16 @@ export function SpendSearchView() {
                           <Badge variant="outline" className="text-[10px] py-0 h-4 shrink-0">
                             {item.source === "card" ? "cartão" : "transação"}
                           </Badge>
+                          {item.status === "pending" && (
+                            <Badge variant="warning" className="text-[10px] py-0 h-4 shrink-0">
+                              {item.source === "card" ? "previsão" : "pendente"}
+                            </Badge>
+                          )}
+                          {item.status === "cancelled" && (
+                            <Badge variant="secondary" className="text-[10px] py-0 h-4 shrink-0">
+                              cancelada
+                            </Badge>
+                          )}
                         </div>
                         <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                           <span className="text-xs text-[hsl(var(--muted-foreground))]">

@@ -466,6 +466,15 @@ const SECTIONS: Section[] = [
               &quot;Parceladas&quot;) aparecem quando a fatura tem desses tipos. Click
               isola, click de novo volta pra &quot;Todos&quot;.
             </>,
+            <>
+              <Term>Gráfico</Term> — pizza da composição da fatura por
+              categoria, com o <em>% e o valor</em> de cada uma e o total no
+              centro. O total do gráfico bate com o do cabeçalho: na visão
+              Detalhada inclui previsões, na Consolidada não; reembolsos ficam
+              fora nas duas. Ele mostra a fatura inteira, então não muda com a
+              busca nem com os chips. O botão <Term>Gráfico</Term> esconde e
+              mostra.
+            </>,
           ]}
         />
 
@@ -498,8 +507,9 @@ const SECTIONS: Section[] = [
         <Lead>
           Cadastre quantas categorias quiser e marque onde cada uma é usada:
           no lançamento de <Term>transações</Term>, no lançamento de{" "}
-          <Term>gastos do cartão</Term>, ou em ambos. As categorias padrão do
-          app continuam disponíveis e não podem ser editadas.
+          <Term>gastos do cartão</Term>, ou em ambos. As categorias{" "}
+          <Term>padrão</Term> que vêm com a conta são suas: dá pra renomear,
+          repintar e mudar onde elas valem, sem afetar ninguém.
         </Lead>
 
         <Subtitle>Regras do cadastro</Subtitle>
@@ -529,21 +539,29 @@ const SECTIONS: Section[] = [
           ]}
         />
 
-        <Subtitle>Edição e exclusão</Subtitle>
+        <Subtitle>Edição, inativação e exclusão</Subtitle>
         <Bullets
           items={[
             <>
               Editar nome/cor reflete imediatamente em listas e gráficos —
-              os lançamentos apontam pra categoria, não pra uma cópia.
+              os lançamentos apontam pra categoria, não pra uma cópia. Vale
+              também para as categorias <Term>padrão</Term>.
             </>,
             <>
-              Excluir uma categoria <em>não apaga lançamento nenhum</em>:
-              transações e gastos de cartão antigos passam a aparecer como{" "}
-              <Term>Sem categoria</Term>.
+              <Term>Excluir</Term> só é permitido enquanto a categoria não tem
+              nenhum lançamento. Com uso, o app bloqueia e mostra quantos
+              lançamentos existem — apagar ali deixaria todos eles{" "}
+              <Term>Sem categoria</Term>, perdendo a classificação para sempre.
+            </>,
+            <>
+              <Term>Inativar</Term> é o caminho para aposentar uma categoria
+              que já tem histórico: ela sai dos seletores de novos lançamentos
+              e os antigos continuam classificados. Dá pra reativar quando
+              quiser, pelo chip <Term>Inativas</Term>.
             </>,
             <>
               Categorias do(a) parceiro(a) ficam visíveis quando o casal está
-              ativo, mas só quem criou pode editar/excluir.
+              ativo, mas só quem criou pode editar/inativar/excluir.
             </>,
           ]}
         />

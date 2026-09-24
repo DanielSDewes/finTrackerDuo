@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock, User, Users } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock, User, Users, PieChart } from "lucide-react";
 import { cardsService } from "../services/cards.service";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
@@ -12,6 +12,7 @@ import { usePartner } from "@/hooks/use-partner";
 import { useToastMutation } from "@/hooks/use-toast-mutation";
 import { CardTransactionForm } from "./transaction-form";
 import { EditCardTransactionForm } from "./edit-transaction-form";
+import { BillCategoryChart } from "./bill-category-chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -82,6 +83,7 @@ export function BillDetail() {
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
   const [viewMode, setViewMode] = useState<"detailed" | "consolidated">("detailed");
+  const [showChart, setShowChart] = useState(true);
   const [formOpen, setFormOpen] = useState(false);
   const [editTarget, setEditTarget] = useState<CreditCardTransaction | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
@@ -220,6 +222,15 @@ export function BillDetail() {
   const displayCount = consolidated ? baseList.length : transactions.length;
   const displayTotal = consolidated ? consolidatedTotal : total;
 
+  // Fonte do gráfico: o mesmo conjunto por trás do displayTotal, para o total
+  // do centro do donut bater com o do cabeçalho. Os reembolsados saem dentro
+  // do componente; a consolidada é quem decide sobre previsões. Não precisa
+  // unir os splits do casal: somar as duas metades dá o mesmo por categoria.
+  const chartTransactions = consolidated
+    ? transactions.filter((t) => !t.is_forecast)
+    : transactions;
+  const hasChartData = chartTransactions.some((t) => !t.is_reimbursed);
+
   // Status atual da fatura — usa o activeBill (derivado por mês/ano) ao
   // invés de selectedBillId para sobreviver a cleanups + recriações.
   const currentStatus = (activeBill?.status ?? "open") as "open" | "closed" | "paid" | "overdue";
@@ -311,30 +322,46 @@ export function BillDetail() {
         {/* Visão: Detalhada (padrão) ou Consolidada (sem previsões + lançamentos
             divididos com o casal unidos em um só). Só aparece quando há o que
             consolidar. */}
-        {canConsolidate && (
-          <div className="flex items-center gap-1.5 text-[11px]">
-            <span className="text-muted-foreground uppercase tracking-wide mr-0.5">
-              Visão
-            </span>
-            <Button
-              type="button"
-              variant={!consolidated ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-3 text-xs"
-              onClick={() => setViewMode("detailed")}
-            >
-              Detalhada
-            </Button>
-            <Button
-              type="button"
-              variant={consolidated ? "default" : "outline"}
-              size="sm"
-              className="h-7 px-3 text-xs gap-1"
-              onClick={() => setViewMode("consolidated")}
-            >
-              <Users className="w-3 h-3" />
-              Consolidada
-            </Button>
+        {(canConsolidate || hasChartData) && (
+          <div className="flex items-center gap-1.5 text-[11px] flex-wrap">
+            {canConsolidate && (
+              <>
+                <span className="text-muted-foreground uppercase tracking-wide mr-0.5">
+                  Visão
+                </span>
+                <Button
+                  type="button"
+                  variant={!consolidated ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => setViewMode("detailed")}
+                >
+                  Detalhada
+                </Button>
+                <Button
+                  type="button"
+                  variant={consolidated ? "default" : "outline"}
+                  size="sm"
+                  className="h-7 px-3 text-xs gap-1"
+                  onClick={() => setViewMode("consolidated")}
+                >
+                  <Users className="w-3 h-3" />
+                  Consolidada
+                </Button>
+              </>
+            )}
+            {hasChartData && (
+              <Button
+                type="button"
+                variant={showChart ? "default" : "outline"}
+                size="sm"
+                className="h-7 px-3 text-xs gap-1 ml-auto"
+                onClick={() => setShowChart((v) => !v)}
+              >
+                <PieChart className="w-3 h-3" />
+                Gráfico
+              </Button>
+            )}
           </div>
         )}
 
@@ -418,6 +445,22 @@ export function BillDetail() {
 
       {/* Transaction list */}
       <div className="flex-1 overflow-y-auto p-3 space-y-1.5">
+        {/* Composição da fatura por categoria. Fica fora do filtro de texto e
+            dos chips de propósito: é o retrato da fatura inteira, e não da
+            sublista que o usuário está garimpando. */}
+        {!isLoading && showChart && hasChartData && (
+          <div className="pb-1.5">
+            <BillCategoryChart
+              transactions={chartTransactions}
+              caption={
+                consolidated
+                  ? "Lançamentos realizados, sem previsões e sem reembolsos"
+                  : "Inclui previsões; reembolsos ficam de fora"
+              }
+            />
+          </div>
+        )}
+
         {isLoading ? (
           Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-16 w-full rounded-xl" />

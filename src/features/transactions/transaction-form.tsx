@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2, UserRound, Repeat } from "lucide-react";
@@ -78,6 +78,16 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
     queryFn: () => categoriesService.getTransactionCategories(user!.id, currentType, couple?.id),
     enabled: !!user,
   });
+
+  // O seletor traz só categorias ativas. Ao editar um lançamento antigo cuja
+  // categoria foi inativada depois, ela precisa continuar na lista — senão o
+  // Select abriria vazio e salvar apagaria silenciosamente a classificação.
+  const categoryOptions = useMemo(() => {
+    const list = categories ?? [];
+    const current = transaction?.category;
+    if (!current || list.some((c) => c.id === current.id)) return list;
+    return [...list, current];
+  }, [categories, transaction?.category]);
 
   const mutation = useToastMutation({
     mutationFn: async (data: TransactionInput) => {
@@ -214,9 +224,10 @@ export function TransactionForm({ transaction, onSuccess, partnerId, isPartnerFo
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem categoria</SelectItem>
-                {categories?.map((cat) => (
+                {categoryOptions.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     {cat.name}
+                    {cat.is_active === false && " (inativa)"}
                   </SelectItem>
                 ))}
               </SelectContent>

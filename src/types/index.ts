@@ -65,7 +65,17 @@ export type Category = {
   is_transaction: boolean;
   /** Disponível no lançamento de fatura do cartão. Nunca em receitas. */
   is_card: boolean;
+  /**
+   * Veio do conjunto semeado no cadastro. Continua editável/excluível: desde
+   * 2026-09 cada usuário tem a sua própria cópia das categorias padrão.
+   */
   is_default: boolean;
+  /**
+   * Inativa some dos seletores de lançamento mas continua nomeando o
+   * histórico. É o caminho quando a categoria já tem uso e por isso não pode
+   * ser excluída.
+   */
+  is_active: boolean;
   created_at: string;
 };
 

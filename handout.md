@@ -685,7 +685,7 @@ O `shared_group_id` permite identificar e remover as duas partes de um rateio ju
 ```
 profiles              → dados do usuário (espelho do auth.users)
 couples               → vínculo entre dois usuários
-categories            → categorias de transação e/ou cartão (padrão + cadastradas pelo usuário)
+categories            → categorias de transação e/ou cartão (padrão semeadas por usuário + cadastradas por ele)
 transactions          → movimentações financeiras (receitas/despesas)
 credit_cards          → cartões de crédito cadastrados
 credit_card_bills     → faturas mensais de cada cartão
@@ -786,8 +786,9 @@ Isso significa que se o usuário tem R$ 500 em despesas avulsas e R$ 800 em fatu
 
 ### 10.4 Categorias
 
-- Categorias padrão (`is_default = true`, `user_id = NULL`) são visíveis para todos
+- Cada usuário recebe sua própria cópia das categorias padrão no cadastro (`is_default = true`, com `user_id` preenchido), semeada por `seed_default_categories()` via `handle_new_user`. Por terem dono, elas são editáveis, inativáveis e excluíveis como qualquer outra — e a alteração não vaza para outras contas. Antes de 2026-09 eram uma linha global por categoria (`user_id = NULL`) visível para todos; a migration `2026-09-24-per-user-categories.sql` fez a conversão
 - Usuários cadastram as próprias na tela **Categorias** (`/categories`, `user_id = seu_id`)
+- `is_active = false` **inativa**: a categoria sai dos seletores de lançamento (`getTransactionCategories` / `getCardCategories` filtram por `is_active`) mas continua nomeando o histórico. É o caminho obrigatório para aposentar uma categoria em uso, porque `deleteCategory` recusa a exclusão quando há qualquer `transactions` / `credit_card_transactions` / `future_transactions` apontando pra ela (o FK é `ON DELETE SET NULL`, então excluir perderia a classificação)
 - Cada categoria marca onde é usada: `is_transaction` (form de transações) e/ou `is_card` (lançamento de fatura do cartão)
 - Categorias de transação têm `type`: `income | expense` (obrigatório); receita nunca pode ser de cartão (CHECK `categories_income_not_card`)
 - Categorias só de cartão ficam gravadas com `type = 'expense'` (coluna NOT NULL; gasto por definição)

@@ -1,7 +1,8 @@
 "use client";
 
 import { Controller } from "react-hook-form";
-import { Loader2, ArrowLeftRight, CreditCard } from "lucide-react";
+import { Loader2, ArrowLeftRight, CreditCard, AlertTriangle } from "lucide-react";
+import { isInvestmentCategoryName, INVESTMENT_CATEGORY_NAME } from "@/lib/investment-category";
 import { categorySchema, type CategoryInput } from "@/schemas/category";
 import { categoriesService } from "@/services/categories.service";
 import { useAuthStore } from "@/stores/auth.store";
@@ -58,6 +59,14 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
   const type = watch("type");
   const isIncome = isTransaction && type === "income";
 
+  // A categoria "Investimento" é reconhecida POR NOME (ver
+  // lib/investment-category) para separar aporte de gasto no fluxo de caixa,
+  // nas stats do mês e na busca de aportes. Renomear é permitido, mas o
+  // usuário precisa saber o que se perde.
+  const name = watch("name");
+  const renamingInvestment =
+    !!category && isInvestmentCategoryName(category.name) && name !== category.name;
+
   const mutation = useToastMutation({
     mutationFn: async (data: CategoryInput) => {
       const fields = {
@@ -76,6 +85,7 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
         user_id: user!.id,
         couple_id: couple?.id ?? null,
         is_default: false,
+        is_active: true,
       });
     },
     invalidateKeys: [
@@ -105,6 +115,17 @@ export function CategoryForm({ category, onSuccess }: CategoryFormProps) {
           {...register("name")}
         />
         {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+        {renamingInvestment && (
+          <div className="flex gap-2 rounded-lg border border-warning/30 bg-warning/10 p-2.5 text-xs">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-warning mt-0.5" />
+            <span>
+              Os gráficos identificam o aporte pelo nome{" "}
+              <strong>{INVESTMENT_CATEGORY_NAME}</strong>. Renomeando, estes
+              lançamentos voltam a contar como despesa comum no fluxo de caixa e
+              na economia média do dashboard.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Usage */}

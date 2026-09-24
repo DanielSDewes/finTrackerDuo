@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { Controller } from "react-hook-form";
 import { useQuery } from "@tanstack/react-query";
 import { Loader2 } from "lucide-react";
@@ -50,6 +51,19 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
     queryFn: () => categoriesService.getCardCategories(user!.id, couple?.id),
     enabled: !!user,
   });
+
+  // O seletor traz só categorias ativas. Se a categoria deste lançamento foi
+  // inativada depois, ela precisa continuar na lista — senão o Select abriria
+  // vazio e salvar apagaria a classificação sem o usuário perceber.
+  const categoryOptions = useMemo(() => {
+    const list: { id: string; name: string; color: string; inactive?: boolean }[] =
+      (categories ?? []).map((c) => ({ id: c.id, name: c.name, color: c.color }));
+    const current = tx.category;
+    if (current && !list.some((c) => c.id === current.id)) {
+      list.push({ ...current, inactive: true });
+    }
+    return list;
+  }, [categories, tx.category]);
 
   const mutation = useToastMutation({
     mutationFn: (data: CardTransactionEditInput) =>
@@ -131,7 +145,7 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">Sem categoria</SelectItem>
-                {categories?.map((cat) => (
+                {categoryOptions.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     <span className="flex items-center gap-2">
                       <span
@@ -139,6 +153,7 @@ export function EditCardTransactionForm({ tx, onSuccess }: EditCardTransactionFo
                         style={{ backgroundColor: cat.color }}
                       />
                       {cat.name}
+                      {cat.inactive && " (inativa)"}
                     </span>
                   </SelectItem>
                 ))}
