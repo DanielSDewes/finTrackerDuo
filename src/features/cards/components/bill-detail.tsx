@@ -3,8 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock, User, Users, PieChart } from "lucide-react";
+import { Plus, Search, Trash2, ReceiptText, Layers, Clock, Pencil, CheckCircle2, HandCoins, RotateCcw, Repeat, Lock, User, Users, PieChart, FileSpreadsheet, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import { cardsService } from "../services/cards.service";
+import { downloadBillXlsx, type BillExportPerson } from "../utils/export-bill-xlsx";
 import { useCardsStore } from "../stores/cards.store";
 import { useAuthStore } from "@/stores/auth.store";
 import { useScopeFilter } from "@/hooks/use-scope-filter";
@@ -23,7 +25,7 @@ import { ConfirmDeleteDialog } from "@/components/shared/confirm-delete-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { RowActionsMenu } from "@/components/shared/row-actions-menu";
 import { BILL_STATUS_META } from "../types";
-import type { CreditCardTransaction } from "../types";
+import type { CreditCard, CreditCardTransaction } from "../types";
 import { cn, formatCurrency, formatDate } from "@/lib/utils";
 
 const MONTHS_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"];
@@ -76,9 +78,10 @@ function consolidateTransactions(txs: CreditCardTransaction[]): CreditCardTransa
 export function BillDetail() {
   const { selectedCardId, selectedBillId, selectedBillMonth, selectedBillYear } = useCardsStore();
   const { user, couple } = useAuthStore();
-  const { readOnly } = useScopeFilter();
-  const { partnerFirstName } = usePartner();
+  const { readOnly, scopeKey } = useScopeFilter();
+  const { partner, partnerId, partnerFirstName } = usePartner();
   const queryClient = useQueryClient();
+  const [exporting, setExporting] = useState(false);
 
   const [search, setSearch] = useState("");
   const [filterMode, setFilterMode] = useState<FilterMode>("all");
@@ -241,6 +244,57 @@ export function BillDetail() {
   const isBillLocked = !!activeBill && currentStatus !== "open";
   const lockedLabel = BILL_STATUS_META[currentStatus]?.label.toLowerCase() ?? "fechada";
 
+  // Exporta a visão atual (detalhada ou consolidada, com filtro/busca) para
+  // XLSX. O resumo e as categorias da planilha são sempre da fatura inteira.
+  const handleExport = async () => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const cardName =
+        queryClient
+          .getQueryData<CreditCard[]>(["cards", scopeKey])
+          ?.find((c) => c.id === selectedCardId)?.name ?? "Cartão";
+
+      const people: BillExportPerson[] = [];
+      if (user) people.push({ id: user.id, name: user.name || "Você" });
+      if (hasCouple && partnerId) {
+        people.push({ id: partnerId, name: partner?.name || partnerFirstName });
+      }
+
+      const filterParts: string[] = [];
+      if (!consolidated && filterMode !== "all") {
+        filterParts.push(
+          {
+            forecast: "Previsão",
+            installment: "Parceladas",
+            mine: "Minhas transações",
+            "mine-installment": "Minhas parcelas",
+          }[filterMode],
+        );
+      }
+      if (search.trim()) filterParts.push(`Busca: "${search.trim()}"`);
+
+      await downloadBillXlsx({
+        cardName,
+        monthLabel: MONTHS_PT[selectedBillMonth - 1],
+        month: selectedBillMonth,
+        year: selectedBillYear,
+        view: consolidated ? "consolidated" : "detailed",
+        statusLabel: activeBill ? BILL_STATUS_META[currentStatus].label : null,
+        transactions,
+        rows: filtered,
+        filterLabel: filterParts.length > 0 ? filterParts.join(" · ") : null,
+        people,
+      });
+      toast.success("Planilha da fatura exportada");
+    } catch (err) {
+      console.error(err);
+      toast.error("Erro ao exportar a fatura");
+    } finally {
+      setExporting(false);
+    }
+  };
+
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -294,6 +348,22 @@ export function BillDetail() {
                 {BILL_STATUS_META[currentStatus].label}
               </Badge>
             )}
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1 text-xs"
+              onClick={handleExport}
+              disabled={isLoading || exporting || transactions.length === 0}
+              title={`Exportar a visão ${consolidated ? "consolidada" : "detalhada"} para Excel (.xlsx)`}
+              aria-label="Exportar fatura para XLSX"
+            >
+              {exporting ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+              )}
+              <span className="hidden sm:inline">Exportar</span>
+            </Button>
             {!readOnly && (
               <Button
                 size="sm"
